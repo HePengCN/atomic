@@ -236,4 +236,42 @@ std::string getFileDirName(std::string filePath, bool withPrefix)
     }
 }
 
+void readline(char *filePath)
+{
+    std::ifstream fin(filePath);
+    if(!fin.is_open()) {
+        printf("%s:%d: Error: open %s fail: %s\n", __func__, __LINE__, filePath, strerror(errno));
+        return -2;
+    }
+
+    std::string line;
+    while(fin >> line) {
+
+    }
+    fin.close();
+}
+
+
+/*
+* Press Ctrl-D will stop the loop;
+*/
+void read_stdin_loop()
+{
+    const int BUFFERSIZE = 64;
+
+    char buffer[BUFFERSIZE];
+    memset(buffer, 0, BUFFERSIZE);
+
+    while(NULL != fgets(buffer, BUFFERSIZE, stdin)) {
+        int len = strlen(buffer);
+        if(len > 0) {
+            buffer[len-1] = '\0'; //  '\n' to '\0'
+        }
+        /*
+        *DO THINGS HERE
+        */
+    }
+    return;
+}
+
 
