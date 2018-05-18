@@ -1,0 +1,48 @@
+1、提取文件名
+~$: var=/dir1/dir2/file.txt
+~$: echo ${var##*/}
+file.txt
+2、提取后缀
+~$: echo ${var##*.}
+txt
+3、提取不带后缀的文件名，分两步
+~$: tmp=${var##*/}
+~$: echo $tmp
+file.txt
+~$: echo ${tmp%.*}
+file
+4、提取目录
+~$: echo ${var%/*}
+/dir1/dir2
+
+使用文件目录的专有命令basename和dirname
+1、提取文件名，注意：basename是一个命令，使用$(), 而不是${}
+~$: echo $(basename $var)
+file.txt
+2、提取不带后缀的文件名
+~$: echo $(basename $var .txt)
+file
+3、提取目录
+~$: dirname $var
+/dir1/dir2
+~$: echo $(dirname $var)
+/dir1/dir2
+
+data 指定格式输出
+date --utc "+%Y-%m-%d_%H:%M:%S"
+date --utc "+%Y-%m-%d_%H-%M-%S.%N_GMT"
+
+
+列出制定参数下的所有目录
+function getdir(){
+    for element in `ls $1`
+    do  
+        dir_or_file=$1"/"$element
+        if [ -d $dir_or_file ]
+        then
+            echo $dir_or_file 
+            getdir $dir_or_file
+        fi  
+    done
+}
+
