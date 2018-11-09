@@ -13,7 +13,8 @@
 void* read_thd(void* hQueue)
 {
 
-    void *pData = NULL;
+    char pData[128];
+    memset(pData, 0, sizeof(pData));
     uint32_t data_size = 0;
     int ret;
 
@@ -28,23 +29,23 @@ void* read_thd(void* hQueue)
     }
 
     for(int i =0; i < COUNT; i++) {
-        ret = xqueue_wait_and_front(hQueue, &pData, &data_size);
+        ret = xqueue_wait_and_front(hQueue, pData, &data_size);
         if(0 != ret) {
             printf("xqueue_wait_and_front return error.\n");
             return hQueue;
         }
 
-        printf("%d: size: %u, pData: %s, queue_size: %u\n", i, data_size, (char*)pData, xqueue_size(hQueue));
-        xqueue_free(pData);
+        printf("%d: size: %u, pData: %s, queue_size: %u\n", i, data_size, pData, xqueue_size(hQueue));
+        //xqueue_free(pData);
 
-        ret = xqueue_wait_and_pop(hQueue, &pData, &data_size);
+        ret = xqueue_wait_and_pop(hQueue, pData, &data_size);
         if(0 != ret) {
             printf("xqueue_wait_and_pop return error.\n");
             return hQueue;
         }
 
-        printf("%d, size: %u, pData: %s, queue_size: %u\n", i, data_size, (char*)pData, xqueue_size(hQueue));
-        xqueue_free(pData);
+        printf("%d, size: %u, pData: %s, queue_size: %u\n", i, data_size, pData, xqueue_size(hQueue));
+        //xqueue_free(pData);
     }
 
     return hQueue;
@@ -54,7 +55,7 @@ int main(int argc, char* argv[])
 {
     pthread_t hThd;
     void* hQueue;
-    hQueue = xqueue_new();
+    hQueue = xqueue_new(128);
     if(0 != pthread_create(&hThd, NULL, read_thd, hQueue)) {
         goto End;
     }

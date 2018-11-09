@@ -25,6 +25,7 @@ extern "C" {
 #include <unistd.h>
 #include <assert.h>
 #include <stdio.h>
+#include <sys/time.h>
 
 #define MAGIC_NO (0x58585858) /**<ascii for XXXX*/
 

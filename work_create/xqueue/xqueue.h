@@ -19,7 +19,7 @@
 #include <stdbool.h>
 
 
-void* xqueue_new();
+void* xqueue_new(uint32_t msgmaxlen);
 
 int   xqueue_destory(void* hQueue);
 
@@ -27,14 +27,14 @@ int  xqueue_push(void* hQueue, const void* pData, uint32_t data_size);
 
 bool  xqueue_empty(void* hQueue);
 
-bool  xqueue_try_pop(void* hQueue, void** ppData, uint32_t* pData_size);
+bool  xqueue_try_pop(void* hQueue, void* pData, uint32_t* pData_size);
 
-int  xqueue_wait_and_pop(void* hQueue, void** ppData, uint32_t* pData_size);
+int  xqueue_wait_and_pop(void* hQueue, void* pData, uint32_t* pData_size);
 
-bool  xqueue_try_front(void* hQueue, void** ppData, uint32_t* pData_size);
+bool  xqueue_try_front(void* hQueue, void* pData, uint32_t* pData_size);
 
-int  xqueue_wait_and_front(void* hQueue, void** ppData, uint32_t* pData_size);
+int  xqueue_wait_and_front(void* hQueue, void* pData, uint32_t* pData_size);
 
 uint32_t xqueue_size(void* hQueue);
 
-void  xqueue_free(void* pData);
+//void  xqueue_free(void* pData);

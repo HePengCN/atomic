@@ -25,11 +25,12 @@
 
 typedef struct hThd_pthd_mcu_recv {
     char header[sizeof(hThd_pthd_t)];
+    void *task_private;  // will inited in task_init, used by task_onceopr, released in task_clear
     void *hQueue;   // hQueue is the EXTERNAL resource interface to thd, only using without considering resource management,which should be done by others.
 } hThd_pthd_mcu_recv_t;
 
 
-hThd_t* mcurecv_thd_handle_new(void* hQueue);
+hThd_t* mcurecv_thd_handle_new(const char thdname[16], int waitmsec, void* hQueue);
 void mcurecv_thd_handle_release(hThd_t* hThd);
 
 

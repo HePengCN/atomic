@@ -29,11 +29,12 @@ typedef struct xqueue_impl {
     xnode_t *head;
     xnode_t *tail;
     uint32_t count;
+    uint32_t msgmaxlen;
     pthread_mutex_t mutex;
     pthread_cond_t cond;
 } xqueue_impl_t;
 
-xqueue_impl_t* xqueue_impl_new();
+xqueue_impl_t* xqueue_impl_new(uint32_t msgmaxlen);
 
 int xqueue_impl_destory(xqueue_impl_t* hQueue);
 
@@ -41,13 +42,13 @@ int  xqueue_impl_push(xqueue_impl_t* hQueue, const void* pData, uint32_t data_si
 
 bool  xqueue_impl_empty(xqueue_impl_t* hQueue);
 
-bool  xqueue_impl_try_pop(xqueue_impl_t* hQueue, void** ppData, uint32_t* pData_size);
+bool  xqueue_impl_try_pop(xqueue_impl_t* hQueue, void* pData, uint32_t* pData_size);
 
-int  xqueue_impl_wait_and_pop(xqueue_impl_t* hQueue, void** ppData, uint32_t* pData_size);
+int  xqueue_impl_wait_and_pop(xqueue_impl_t* hQueue, void* pData, uint32_t* pData_size);
 
-bool  xqueue_impl_try_front(xqueue_impl_t* hQueue, void** ppData, uint32_t* pData_size);
+bool  xqueue_impl_try_front(xqueue_impl_t* hQueue, void* pData, uint32_t* pData_size);
 
-int  xqueue_impl_wait_and_front(xqueue_impl_t* hQueue, void** ppData, uint32_t* pData_size);
+int  xqueue_impl_wait_and_front(xqueue_impl_t* hQueue, void* pData, uint32_t* pData_size);
 
 uint32_t xqueue_impl_size(xqueue_impl_t* hQueue);
 

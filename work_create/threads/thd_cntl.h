@@ -23,10 +23,11 @@
 
 typedef enum thd_state {
     THD_STATE_UNCREAT = THD_CNTL_MAGIC_NO,  //43
-    THD_STATE_INITED, //44
-    THD_STATE_RUNNING, //45
-    THD_STATE_STOPPED, //46
-    THD_STATE_EXITED //47
+    THD_STATE_CREATED, //44
+    THD_STATE_INITED, //45
+    THD_STATE_RUNNING, //46
+    THD_STATE_STOPPED, //47
+    THD_STATE_EXITED //48
 } thd_state_e;
 
 typedef struct hThd {
@@ -40,4 +41,4 @@ int thd_stop(hThd_t *hThd);
 int thd_destory(hThd_t *hThd);
 int thd_join(hThd_t *hThd);
 thd_state_e thd_state(hThd_t *hThd);
-
+char*  thd_state_str(thd_state_e);

@@ -10,6 +10,70 @@
 #include "mcu_recv_thd.h"
 #include "xqueue.h"
 
+
+static int task_init(hThd_pthd_t* hThd)
+{
+    int ret = 0;
+    hThd_pthd_mcu_recv_t* hThd_local = (hThd_pthd_mcu_recv_t*)hThd;
+    //sleep(4);
+    return ret;
+}
+static int task_onceopr(hThd_pthd_t* hThd)
+{
+    int ret = 0;
+    hThd_pthd_mcu_recv_t* hThd_local = (hThd_pthd_mcu_recv_t*)hThd;
+    //sleep(4);
+    return ret;
+
+}
+static int task_clear(hThd_pthd_t* hThd)
+{
+    int ret = 0;
+    hThd_pthd_mcu_recv_t* hThd_local = (hThd_pthd_mcu_recv_t*)hThd;
+
+    hThd_local->task_private = NULL;
+    return ret;
+}
+
+hThd_t* mcurecv_thd_handle_new(const char thdname[16], int waitmsec,void* hQueue)
+{
+    assert(NULL != hQueue);
+    hThd_pthd_mcu_recv_t* hThd = (hThd_pthd_mcu_recv_t*)malloc(sizeof(hThd_pthd_mcu_recv_t));
+    if(NULL == hThd) {
+        return NULL;
+    }
+    memset(hThd, 0, sizeof(*hThd));
+
+    //init self part
+    (void)hThd->task_private; // will managed by task
+    hThd->hQueue = hQueue;
+
+    //iteration: The upper layer is responsible for initialization of all the upper layers.
+    thd_impl_init_handle((hThd_pthd_t*)hThd, thdname, waitmsec, task_init, task_onceopr, task_clear);
+
+    return (hThd_t*)hThd;
+}
+
+void mcurecv_thd_handle_release(hThd_t* hThd_base)
+{
+    if(NULL == hThd_base) {
+        return;
+    }
+
+    //uninit self part
+    hThd_pthd_mcu_recv_t* hThd = (hThd_pthd_mcu_recv_t*)hThd_base;
+    assert(NULL == hThd->task_private);   // task_clear must be executed.
+    hThd->hQueue = NULL;
+
+    //iteration: uninit upper layer
+    thd_impl_uninit_handle((hThd_pthd_t*)hThd_base);
+
+    //free
+    free(hThd);
+}
+
+
+/*
 static void* mcurecv_thd(hThd_pthd_t* hThd)
 {
     bool stop = false, exit = false;
@@ -51,7 +115,7 @@ wait:
         pthread_cond_signal(&(hThd->cond)); //feedback for stop
         goto wait;
     }
-    /*enter exit process*/
+
 
     //TODO: clear function here.
     pthread_mutex_lock(&(hThd->mutex));
@@ -61,28 +125,4 @@ wait:
     return hThd;
 }
 
-hThd_t* mcurecv_thd_handle_new(void* hQueue)
-{
-    assert(NULL != hQueue);
-    hThd_pthd_mcu_recv_t* hThd = (hThd_pthd_mcu_recv_t*)malloc(sizeof(hThd_pthd_mcu_recv_t));
-    if(NULL == hThd) {
-        return NULL;
-    }
-    hThd->hQueue = hQueue;
-    hThd_pthd_t* hThd_ctrl = (hThd_pthd_t*)hThd;
-    thd_impl_init_handle(hThd_ctrl, mcurecv_thd);
-    return (hThd_t*)hThd;
-}
-
-void mcurecv_thd_handle_release(hThd_t* hThd_base)
-{
-    if(NULL == hThd_base) {
-        return;
-    }
-    hThd_pthd_mcu_recv_t* hThd = (hThd_pthd_mcu_recv_t*)hThd_base;
-    hThd_pthd_t* hThd_ctrl = (hThd_pthd_t*)hThd_base;
-    thd_impl_uninit_handle(hThd_ctrl);
-    free(hThd);
-}
-
-
+*/

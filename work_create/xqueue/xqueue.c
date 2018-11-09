@@ -1,9 +1,9 @@
 #include "xqueue.h"
 #include "xqueue_impl.h"
 
-void* xqueue_new()
+void* xqueue_new(uint32_t msgmaxlen)
 {
-    return xqueue_impl_new();
+    return xqueue_impl_new(msgmaxlen);
 }
 
 int   xqueue_destory(void* hQueue)
@@ -21,24 +21,24 @@ bool  xqueue_empty(void* hQueue)
     return xqueue_impl_empty((xqueue_impl_t*)hQueue);
 }
 
-bool  xqueue_try_pop(void* hQueue, void** ppData, uint32_t* pData_size)
+bool  xqueue_try_pop(void* hQueue, void* pData, uint32_t* pData_size)
 {
-    return xqueue_impl_try_pop((xqueue_impl_t*)hQueue, ppData, pData_size);
+    return xqueue_impl_try_pop((xqueue_impl_t*)hQueue, pData, pData_size);
 }
 
-int  xqueue_wait_and_pop(void* hQueue, void** ppData, uint32_t* pData_size)
+int  xqueue_wait_and_pop(void* hQueue, void* pData, uint32_t* pData_size)
 {
-    return xqueue_impl_wait_and_pop((xqueue_impl_t*)hQueue, ppData, pData_size);
+    return xqueue_impl_wait_and_pop((xqueue_impl_t*)hQueue, pData, pData_size);
 }
 
-bool  xqueue_try_front(void* hQueue, void** ppData, uint32_t* pData_size)
+bool  xqueue_try_front(void* hQueue, void* pData, uint32_t* pData_size)
 {
-    return xqueue_impl_try_front((xqueue_impl_t*)hQueue, ppData, pData_size);
+    return xqueue_impl_try_front((xqueue_impl_t*)hQueue, pData, pData_size);
 }
 
-int  xqueue_wait_and_front(void* hQueue, void** ppData, uint32_t* pData_size)
+int  xqueue_wait_and_front(void* hQueue, void* pData, uint32_t* pData_size)
 {
-    return xqueue_impl_wait_and_front((xqueue_impl_t*)hQueue, ppData, pData_size);
+    return xqueue_impl_wait_and_front((xqueue_impl_t*)hQueue, pData, pData_size);
 }
 
 uint32_t xqueue_size(void* hQueue)

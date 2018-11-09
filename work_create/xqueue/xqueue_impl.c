@@ -4,22 +4,18 @@
 #include "xqueue.h"
 #include "xqueue_impl.h"
 
-static int mkdata_for_user(xqueue_impl_t* hQueue, void** ppData, uint32_t* pData_size)
+static int mkdata_for_user(xqueue_impl_t* hQueue, void* pData, uint32_t* pData_size)
 {
     *pData_size = hQueue->head->data_size;
-    char* user = (char*)malloc(*pData_size);
-    if(NULL == user) {
-        return -1;
-    }
-    memcpy(user, hQueue->head->data, *pData_size);
-    *ppData = user;
+    memcpy(pData, hQueue->head->data, *pData_size);
     return 0;
 }
 
-xqueue_impl_t* xqueue_impl_new()
+xqueue_impl_t* xqueue_impl_new(uint32_t msgmaxlen)
 {
     xqueue_impl_t* hQueue = (xqueue_impl_t*)malloc(sizeof(xqueue_impl_t));
     memset(hQueue, 0, sizeof(xqueue_impl_t));
+    hQueue->msgmaxlen = msgmaxlen;
     pthread_cond_init(&(hQueue->cond), NULL);
     pthread_mutex_init(&(hQueue->mutex), NULL);
     return hQueue;
@@ -50,6 +46,7 @@ int xqueue_impl_destory(xqueue_impl_t* hQueue)
 int  xqueue_impl_push(xqueue_impl_t* hQueue, const void* pData, uint32_t data_size)
 {
     assert(NULL != hQueue);
+    assert(data_size <= hQueue->msgmaxlen);
     int ret = 0;
     pthread_mutex_lock(&(hQueue->mutex));
     xnode_t* new = (xnode_t*)malloc(sizeof(xnode_t) + data_size);
@@ -87,7 +84,7 @@ bool  xqueue_impl_empty(xqueue_impl_t* hQueue)
     return ret;
 }
 
-bool  xqueue_impl_try_pop(xqueue_impl_t* hQueue, void** ppData, uint32_t* pData_size)
+bool  xqueue_impl_try_pop(xqueue_impl_t* hQueue, void* pData, uint32_t* pData_size)
 {
     assert(NULL != hQueue);
     bool ret = true;
@@ -97,7 +94,7 @@ bool  xqueue_impl_try_pop(xqueue_impl_t* hQueue, void** ppData, uint32_t* pData_
         goto end;
     }
 
-    if (0 != mkdata_for_user(hQueue, ppData, pData_size)) {
+    if (0 != mkdata_for_user(hQueue, pData, pData_size)) {
         ret = false;
         goto end;
     }
@@ -112,7 +109,7 @@ end:
     return ret;
 }
 
-int  xqueue_impl_wait_and_pop(xqueue_impl_t* hQueue, void** ppData, uint32_t* pData_size)
+int  xqueue_impl_wait_and_pop(xqueue_impl_t* hQueue, void* pData, uint32_t* pData_size)
 {
     assert(NULL != hQueue);
     int ret = 0;
@@ -121,7 +118,7 @@ int  xqueue_impl_wait_and_pop(xqueue_impl_t* hQueue, void** ppData, uint32_t* pD
         pthread_cond_wait(&(hQueue->cond), &(hQueue->mutex));
     }
 
-    if (0 != mkdata_for_user(hQueue, ppData, pData_size)) {
+    if (0 != mkdata_for_user(hQueue, pData, pData_size)) {
         ret = -1;
         goto end;
     }
@@ -137,7 +134,7 @@ end:
 
 }
 
-bool  xqueue_impl_try_front(xqueue_impl_t* hQueue, void** ppData, uint32_t* pData_size)
+bool  xqueue_impl_try_front(xqueue_impl_t* hQueue, void* pData, uint32_t* pData_size)
 {
     assert(NULL != hQueue);
     bool ret = true;
@@ -148,7 +145,7 @@ bool  xqueue_impl_try_front(xqueue_impl_t* hQueue, void** ppData, uint32_t* pDat
 
     }
 
-    if (0 != mkdata_for_user(hQueue, ppData, pData_size)) {
+    if (0 != mkdata_for_user(hQueue, pData, pData_size)) {
         ret = false;
         goto end;
     }
@@ -159,7 +156,7 @@ end:
 
 }
 
-int  xqueue_impl_wait_and_front(xqueue_impl_t* hQueue, void** ppData, uint32_t* pData_size)
+int  xqueue_impl_wait_and_front(xqueue_impl_t* hQueue, void* pData, uint32_t* pData_size)
 {
     assert(NULL != hQueue);
     int ret = 0;
@@ -168,7 +165,7 @@ int  xqueue_impl_wait_and_front(xqueue_impl_t* hQueue, void** ppData, uint32_t* 
         pthread_cond_wait(&(hQueue->cond), &(hQueue->mutex));
     }
 
-    if (0 != mkdata_for_user(hQueue, ppData, pData_size)) {
+    if (0 != mkdata_for_user(hQueue, pData, pData_size)) {
         ret = -1;
         goto end;
     }
