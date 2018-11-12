@@ -1,7 +1,7 @@
 /*
 *******************************************************************
  * Copyright (C):
- * FileName: mcuXcpu_msg.h
+ * FileName:
  * Author:        Version :          Date:
  * Description:
  * Version:
@@ -17,6 +17,10 @@
 extern "C" {  
 #endif  
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <fcntl.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -25,7 +29,6 @@ extern "C" {
 #include <unistd.h>
 #include <assert.h>
 #include <stdio.h>
-#include <sys/time.h>
 
 #define MAGIC_NO (0x58585858) /**<ascii for XXXX*/
 

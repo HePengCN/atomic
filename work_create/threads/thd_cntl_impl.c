@@ -24,7 +24,7 @@ static struct timespec get_outtime(int msec)
 
 static int wait_fb(hThd_pthd_t* hThd)
 {
-    if(0 == hThd->timeout) {
+    if(0 > hThd->timeout) {
         return pthread_cond_wait(&(hThd->cond), &(hThd->mutex));
     }
 
@@ -52,11 +52,11 @@ static void* start_routine(hThd_pthd_t* hThd)
     pthread_mutex_lock(&(hThd->mutex));    // if allowd to run
     pThd_base->state = THD_STATE_INITED; //initial done
     pthread_cond_signal(&(hThd->cond));  // feedback for create
-
 wait:
     if(!hThd->exit) {   // when init, stop == false, when stopped, stop == true, so do not care.
         pthread_cond_wait(&(hThd->cond), &(hThd->mutex)); //waiting, unlock, master start to run
     }
+    
     stop = hThd->stop;
     exit = hThd->exit;
     if(!exit && !stop) {

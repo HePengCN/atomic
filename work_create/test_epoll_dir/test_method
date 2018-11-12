@@ -1,0 +1,5 @@
+use mkfifo create a fifo named "/tmp/test_epoll_fifo"
+
+use echo write fifo, then test read fifo;
+
+use cate read fifo, then test write fofo;

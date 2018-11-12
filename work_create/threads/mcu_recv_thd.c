@@ -35,7 +35,7 @@ static int task_clear(hThd_pthd_t* hThd)
     return ret;
 }
 
-hThd_t* mcurecv_thd_handle_new(const char thdname[16], int waitmsec,void* hQueue)
+hThd_t* mcurecv_thd_handle_new(const char thdname[16], int waitmsec, void* hQueue)
 {
     assert(NULL != hQueue);
     hThd_pthd_mcu_recv_t* hThd = (hThd_pthd_mcu_recv_t*)malloc(sizeof(hThd_pthd_mcu_recv_t));
