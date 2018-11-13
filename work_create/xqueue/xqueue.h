@@ -37,4 +37,6 @@ int  xqueue_wait_and_front(void* hQueue, void* pData, uint32_t* pData_size);
 
 uint32_t xqueue_size(void* hQueue);
 
+uint32_t xqueue_msg_maxlen(void* hQueue);
+
 //void  xqueue_free(void* pData);

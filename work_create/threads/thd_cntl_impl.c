@@ -45,18 +45,21 @@ static void* start_routine(hThd_pthd_t* hThd)
     pThd_base->state = THD_STATE_CREATED;
     pthread_mutex_unlock(&(hThd->mutex));
 
-    //TODO: init_function here
-    hThd->task_init(hThd);
-    //init_function done
+    ret = hThd->task_init(hThd);
 
     pthread_mutex_lock(&(hThd->mutex));    // if allowd to run
-    pThd_base->state = THD_STATE_INITED; //initial done
+    if(0 == ret) {
+        pThd_base->state = THD_STATE_INITED;
+    } else {
+        fprintf(stderr, "%s(%d): Error: task_init of thread(%s) return fail.\n", __FUNCTION__, __LINE__, hThd->name);
+        hThd->exit = true;
+    }
     pthread_cond_signal(&(hThd->cond));  // feedback for create
 wait:
     if(!hThd->exit) {   // when init, stop == false, when stopped, stop == true, so do not care.
         pthread_cond_wait(&(hThd->cond), &(hThd->mutex)); //waiting, unlock, master start to run
     }
-    
+
     stop = hThd->stop;
     exit = hThd->exit;
     if(!exit && !stop) {
@@ -66,9 +69,12 @@ wait:
     pthread_mutex_unlock(&(hThd->mutex));
 
     while(!stop && !exit) {
-        //TODO: working function here.
-        //usleep(1000);
-        hThd->task_onceopr(hThd);
+
+        ret = hThd->task_onceopr(hThd);
+        if(0 != ret) {
+            fprintf(stderr, "%s(%d): Error: task_onceopr of thread(%s) return fail.\n", __FUNCTION__, __LINE__, hThd->name);
+            hThd->exit = true;
+        }
 
         pthread_mutex_lock(&(hThd->mutex));
         stop = hThd->stop;
@@ -84,8 +90,11 @@ wait:
     }
     /*enter exit process*/
 
-    //TODO: clear function here.
-    hThd->task_clear(hThd);
+    ret = hThd->task_clear(hThd);
+    if(0 != ret) {
+        fprintf(stderr, "%s(%d): Warning: task_clear of thread(%s) return fail.\n", __FUNCTION__, __LINE__, hThd->name);
+    }
+
     pthread_mutex_lock(&(hThd->mutex));
     pThd_base->state = THD_STATE_EXITED;
     pthread_cond_signal(&(hThd->cond));  //feedback for destory
