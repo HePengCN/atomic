@@ -7,13 +7,12 @@
  * Function List:
  * History:
       <author>  <time>   <version >   <desc>
-      David    96/10/12     1.0     build this moudle
 ********************************************************************/
 
 #pragma once
-#ifdef __cplusplus  
-extern "C" {  
-#endif  
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -51,6 +50,6 @@ extern "C" {
 @return
 *************************************************/
 
-#ifdef __cplusplus  
-}  
-#endif   /* end of __cplusplus */  
+#ifdef __cplusplus
+}
+#endif   /* end of __cplusplus */

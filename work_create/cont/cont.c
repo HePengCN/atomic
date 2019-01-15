@@ -19,8 +19,6 @@
 #include "cont.h"
 #include "com_log.h"
 
-#define TAG "CONT"
-
 typedef struct cont
 {
     uint32_t size;
@@ -33,7 +31,7 @@ hcont_t cont_new(uint32_t size)
     cont_t *con = (cont_t*)malloc(sizeof(cont_t) + size);
     if (NULL == con)
     {
-        COM_LOG_ERROR(TAG, "malloc fail: sizeof(cont_t): %"PRIu64", size: %u\n", (uint64_t)sizeof(cont_t), size);
+        COM_LOG_ERROR("malloc fail: sizeof(cont_t): %"PRIu64", size: %u\n", (uint64_t)sizeof(cont_t), size);
         return NULL;
     }
     con->size = size;
@@ -79,18 +77,18 @@ void cont_set_used(hcont_t con, uint32_t used)
     tmp->used = used;
 }
 
-char* cont_data(hcont_t con)
+unsigned char* cont_data(hcont_t con)
 {
     assert(NULL != con);
     cont_t* tmp = (cont_t*)con;
-    return tmp->data;
+    return (unsigned char*)tmp->data;
 }
 
-const char* cont_data_const(const hcont_t con)
+const unsigned char* cont_data_const(const hcont_t con)
 {
     assert(NULL != con);
     const cont_t* tmp = (const cont_t*)con;
-    return (const char*)(tmp->data);
+    return (const unsigned char*)(tmp->data);
 }
 
 

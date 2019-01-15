@@ -12,16 +12,14 @@
 #include "thd_ctl.h"
 #include "com_log.h"
 
-#define TAG "THD_CTL"
-
 typedef void*(*pthread_start_routine)(void*);
 
-typedef struct hThd_pthd
+typedef struct hthd_pthd
 {
     volatile thd_state_e state;
     char name[16];// thread name
     int  timeout;// timeout of ctrl waiting: in msec
-    void* (*start_routine)(struct hThd_pthd*);
+    void* (*start_routine)(struct hthd_pthd*);
     pthread_t thd;
     pthread_mutex_t mutex;
     pthread_cond_t  cond;// as start condtion, and other condtion as wish
@@ -31,7 +29,7 @@ typedef struct hThd_pthd
     task_func task_onceopr;
     task_func task_clear;
     char ext[0];//EXTERNAL resource interface for thd, resouce managed by task or others.
-} hThd_pthd_t;
+} hthd_pthd_t;
 
 static struct timespec get_outtime(int msec)
 {
@@ -44,101 +42,101 @@ static struct timespec get_outtime(int msec)
     return outtime;
 }
 
-static int wait_fb(hThd_pthd_t* hThd)
+static int wait_fb(hthd_pthd_t* hthd)
 {
-    if (hThd->timeout < 0)
+    if (hthd->timeout < 0)
     {
-        return pthread_cond_wait(&(hThd->cond), &(hThd->mutex));
+        return pthread_cond_wait(&(hthd->cond), &(hthd->mutex));
     }
 
-    struct timespec outtime = get_outtime(hThd->timeout);
-    return pthread_cond_timedwait(&(hThd->cond), &(hThd->mutex), &outtime);
+    struct timespec outtime = get_outtime(hthd->timeout);
+    return pthread_cond_timedwait(&(hthd->cond), &(hthd->mutex), &outtime);
 }
 
 
 /*************************************************
 @brief the routine function of the thead
-@param hThd: the thread control handle
+@param hthd: the thread control handle
 @return
 *************************************************/
-static void* start_routine(hThd_pthd_t* hThd)
+static void* start_routine(hthd_pthd_t* hthd)
 {
     bool stop = false, exit = false;
 
-    pthread_mutex_lock(&(hThd->mutex));// wait creat allow to run
-    pthread_mutex_unlock(&(hThd->mutex));
+    pthread_mutex_lock(&(hthd->mutex));// wait creat allow to run
+    pthread_mutex_unlock(&(hthd->mutex));
 
     int ret = pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
     if (0 != ret)
     {
-        COM_LOG_WARN(TAG, "in thread <%s> pthread_setcancelstate fail. error msg: %s\n", hThd->name, strerror(errno));
+        COM_LOG_WARN("in thread <%s> pthread_setcancelstate fail. error msg: %s\n", hthd->name, strerror(errno));
     }
 
-    ret = hThd->task_init((void*)(hThd->ext));
+    ret = hthd->task_init((void*)(hthd->ext));
 
-    pthread_mutex_lock(&(hThd->mutex));
+    pthread_mutex_lock(&(hthd->mutex));
     if (0 == ret)
     {
-        hThd->state = THD_STATE_INITED;
-        pthread_cond_signal(&(hThd->cond));
+        hthd->state = THD_STATE_INITED;
+        pthread_cond_signal(&(hthd->cond));
     }
     else
     {
-        COM_LOG_ERROR(TAG, "task_init of thread(%s) return fail: error no: %d\n", hThd->name, ret);
-        hThd->exit = true;
+        COM_LOG_ERROR("task_init of thread(%s) return fail: error no: %d\n", hthd->name, ret);
+        hthd->exit = true;
     }
 
 wait:
-    if (!hThd->exit) // init fail: NOT WAIT; init success or stopped, will wait;
+    if (!hthd->exit) // init fail: NOT WAIT; init success or stopped, will wait;
     {
-        pthread_cond_wait(&(hThd->cond), &(hThd->mutex)); //waiting, unlock, master start to run
+        pthread_cond_wait(&(hthd->cond), &(hthd->mutex)); //waiting, unlock, master start to run
     }
 
-    stop = hThd->stop;
-    exit = hThd->exit; // destroy happend in inited or stopped.  when init, stop == false, when stopped, stop == true, so do not care stop flag.
+    stop = hthd->stop;
+    exit = hthd->exit; // destroy happend in inited or stopped.  when init, stop == false, when stopped, stop == true, so do not care stop flag.
     if (!exit && !stop)
     {
-        hThd->state = THD_STATE_RUNNING;
-        pthread_cond_signal(&(hThd->cond));//feedback for start
+        hthd->state = THD_STATE_RUNNING;
+        pthread_cond_signal(&(hthd->cond));//feedback for start
     }
-    pthread_mutex_unlock(&(hThd->mutex));
+    pthread_mutex_unlock(&(hthd->mutex));
 
     while (!stop && !exit)
     {
 
-        ret = hThd->task_onceopr((void*)(hThd->ext));
+        ret = hthd->task_onceopr((void*)(hthd->ext));
         if (0 != ret)
         {
-            COM_LOG_ERROR(TAG, "task_onceopr of thread<%s> return fail, error no: %d\n", hThd->name, ret);
-            hThd->exit = true;
+            COM_LOG_ERROR("task_onceopr of thread<%s> return fail, error no: %d\n", hthd->name, ret);
+            hthd->exit = true;
         }
 
-        pthread_mutex_lock(&(hThd->mutex));
-        stop = hThd->stop;
-        exit = hThd->exit;
-        pthread_mutex_unlock(&(hThd->mutex));
+        pthread_mutex_lock(&(hthd->mutex));
+        stop = hthd->stop;
+        exit = hthd->exit;
+        pthread_mutex_unlock(&(hthd->mutex));
     }
 
     if (stop && !exit)
     {
-        pthread_mutex_lock(&(hThd->mutex));
-        hThd->state = THD_STATE_STOPPED; //initial done
-        pthread_cond_signal(&(hThd->cond)); //feedback for stop
+        pthread_mutex_lock(&(hthd->mutex));
+        hthd->state = THD_STATE_STOPPED; //initial done
+        pthread_cond_signal(&(hthd->cond)); //feedback for stop
         goto wait;
     }
 
     /*enter exit process*/
-    ret = hThd->task_clear((void*)(hThd->ext));
+    ret = hthd->task_clear((void*)(hthd->ext));
     if (0 != ret)
     {
-        COM_LOG_ERROR(TAG, "task_clear of thread<%s> return fail, error no: %d\n", hThd->name, ret);
+        COM_LOG_ERROR("task_clear of thread<%s> return fail, error no: %d\n", hthd->name, ret);
     }
 
-    pthread_mutex_lock(&(hThd->mutex));
-    hThd->state = THD_STATE_EXITED;
-    pthread_cond_signal(&(hThd->cond));  //feedback for destory
-    pthread_mutex_unlock(&(hThd->mutex));
-    return hThd;
+    pthread_mutex_lock(&(hthd->mutex));
+    hthd->state = THD_STATE_EXITED;
+    pthread_cond_signal(&(hthd->cond));  //feedback for destory
+    pthread_mutex_unlock(&(hthd->mutex));
+    return hthd;
 }
 
 
@@ -153,41 +151,41 @@ int thd_create(hthd_t thd)
 {
     assert(NULL != thd);
     int ret = 0;
-    hThd_pthd_t *hThd = (hThd_pthd_t*)thd;
+    hthd_pthd_t *hthd = (hthd_pthd_t*)thd;
 
-    pthread_mutex_lock(&(hThd->mutex));
-    if (THD_STATE_UNCREAT != hThd->state && THD_STATE_EXITED != hThd->state)
+    pthread_mutex_lock(&(hthd->mutex));
+    if (THD_STATE_UNCREAT != hthd->state && THD_STATE_EXITED != hthd->state)
     {
-        COM_LOG_ERROR(TAG, "state of thread<%s> is not expected. error state:%s\n", hThd->name, thd_state_str(hThd->state));
+        COM_LOG_ERROR("state of thread<%s> is not expected. error state:%s\n", hthd->name, thd_state_str(hthd->state));
         ret = -1;
         goto end;
     }
 
-    hThd->stop = false;
-    hThd->exit = false;
-    ret = pthread_create(&(hThd->thd), NULL, (pthread_start_routine)(hThd->start_routine), hThd);
+    hthd->stop = false;
+    hthd->exit = false;
+    ret = pthread_create(&(hthd->thd), NULL, (pthread_start_routine)(hthd->start_routine), hthd);
     if (0 != ret)
     {
-        COM_LOG_ERROR(TAG, "pthread_create for thread<%s> fail. error no: %d\n", hThd->name, ret);
+        COM_LOG_ERROR("pthread_create for thread<%s> fail. error no: %d\n", hthd->name, ret);
         goto end;
     }
 
-    ret = wait_fb(hThd);//unlock here
+    ret = wait_fb(hthd);//unlock here
     if (0 != ret)
     {
-        COM_LOG_WARN(TAG, "wait_fb fail with(%d). thread<%s> got blocked by its task_init function.\n", ret, hThd->name);
+        COM_LOG_WARN("wait_fb fail with(%d). thread<%s> got blocked by its task_init function.\n", ret, hthd->name);
     }
 
-    if (THD_STATE_INITED != hThd->state)
+    if (THD_STATE_INITED != hthd->state)
     {
-        COM_LOG_ERROR(TAG, "create thread<%s> fail, error state: %s\n", hThd->name, thd_state_str(hThd->state));
-        ret = -3;
+        COM_LOG_ERROR("create thread<%s> fail, error state: %s\n", hthd->name, thd_state_str(hthd->state));
+        ret = -1;
         goto end;
     }
 
     ret = 0;
 end:
-    pthread_mutex_unlock(&(hThd->mutex));
+    pthread_mutex_unlock(&(hthd->mutex));
     return ret;
 }
 
@@ -203,35 +201,35 @@ int thd_start(hthd_t thd)
 {
     assert(NULL != thd);
     int ret = 0;
-    hThd_pthd_t *hThd = (hThd_pthd_t*)thd;
+    hthd_pthd_t *hthd = (hthd_pthd_t*)thd;
 
-    pthread_mutex_lock(&(hThd->mutex));
+    pthread_mutex_lock(&(hthd->mutex));
 
-    if (THD_STATE_STOPPED != hThd->state && THD_STATE_INITED != hThd->state)
+    if (THD_STATE_STOPPED != hthd->state && THD_STATE_INITED != hthd->state)
     {
-        COM_LOG_ERROR(TAG, "state of thread<%s> is not expected. error state:%s\n", hThd->name, thd_state_str(hThd->state));
+        COM_LOG_ERROR("state of thread<%s> is not expected. error state:%s\n", hthd->name, thd_state_str(hthd->state));
         ret = -1;
         goto end;
     }
 
-    hThd->stop = false;
-    pthread_cond_signal(&(hThd->cond));
+    hthd->stop = false;
+    pthread_cond_signal(&(hthd->cond));
 
-    ret = wait_fb(hThd);
+    ret = wait_fb(hthd);
     if (0 != ret)
     {
-        COM_LOG_WARN(TAG, "wait_fb fail with(%d). thread<%s> got blocked.\n", ret, hThd->name);
+        COM_LOG_WARN("wait_fb fail with(%d). thread<%s> got blocked.\n", ret, hthd->name);
     }
 
-    if (THD_STATE_RUNNING != hThd->state)
+    if (THD_STATE_RUNNING != hthd->state)
     {
-        COM_LOG_ERROR(TAG, "start thread<%s> fail, error state: %s\n", hThd->name, thd_state_str(hThd->state));
-        ret = -3;
+        COM_LOG_ERROR("start thread<%s> fail, error state: %s\n", hthd->name, thd_state_str(hthd->state));
+        ret = -1;
         goto end;
     }
     ret = 0;
 end:
-    pthread_mutex_unlock(&(hThd->mutex));  // thd start to run
+    pthread_mutex_unlock(&(hthd->mutex));  // thd start to run
     return ret;
 }
 
@@ -247,32 +245,32 @@ int thd_stop(hthd_t thd)
 {
     assert(NULL != thd);
     int ret = 0;
-    hThd_pthd_t *hThd = (hThd_pthd_t*)thd;
+    hthd_pthd_t *hthd = (hthd_pthd_t*)thd;
 
-    pthread_mutex_lock(&(hThd->mutex));
-    if (THD_STATE_RUNNING != hThd->state)
+    pthread_mutex_lock(&(hthd->mutex));
+    if (THD_STATE_RUNNING != hthd->state)
     {
-        COM_LOG_ERROR(TAG, "state of thread<%s> is not expected. error state:%s\n", hThd->name, thd_state_str(hThd->state));
+        COM_LOG_ERROR("state of thread<%s> is not expected. error state:%s\n", hthd->name, thd_state_str(hthd->state));
         ret = -1;
         goto end;
     }
-    hThd->stop = true;
+    hthd->stop = true;
 
-    ret = wait_fb(hThd);
+    ret = wait_fb(hthd);
     if (0 != ret)
     {
-        COM_LOG_WARN(TAG, "wait_fb fail with(%d). thread<%s> got blocked by its task_onceopr function.\n", ret, hThd->name);
+        COM_LOG_WARN("wait_fb fail with(%d). thread<%s> got blocked by its task_onceopr function.\n", ret, hthd->name);
     }
 
-    if (THD_STATE_STOPPED != hThd->state)
+    if (THD_STATE_STOPPED != hthd->state)
     {
-        COM_LOG_ERROR(TAG, "stop thread<%s> fail, error state: %s\n", hThd->name, thd_state_str(hThd->state));
-        ret = -3;
+        COM_LOG_ERROR("stop thread<%s> fail, error state: %s\n", hthd->name, thd_state_str(hthd->state));
+        ret = -1;
         goto end;
     }
     ret = 0;
 end:
-    pthread_mutex_unlock(&(hThd->mutex));
+    pthread_mutex_unlock(&(hthd->mutex));
     return ret;
 }
 
@@ -286,14 +284,14 @@ end:
 int thd_join(hthd_t thd)
 {
     assert(NULL != thd);
-    hThd_pthd_t *hThd = (hThd_pthd_t*)thd;
-    pthread_mutex_lock(&(hThd->mutex));
-    if (THD_STATE_INITED == hThd->state || THD_STATE_STOPPED == hThd->state)
+    hthd_pthd_t *hthd = (hthd_pthd_t*)thd;
+    pthread_mutex_lock(&(hthd->mutex));
+    if (THD_STATE_INITED == hthd->state || THD_STATE_STOPPED == hthd->state)
     {
-        fprintf(stderr, "%s, %d: Warning: Thread <%s> is in state: %s.\n", __FUNCTION__, __LINE__,  hThd->name, thd_state_str(hThd->state));
+        fprintf(stderr, "%s, %d: Warning: Thread <%s> is in state: %s.\n", __FUNCTION__, __LINE__,  hthd->name, thd_state_str(hthd->state));
     }
-    pthread_mutex_unlock(&(hThd->mutex));
-    return pthread_join(hThd->thd, NULL);
+    pthread_mutex_unlock(&(hthd->mutex));
+    return pthread_join(hthd->thd, NULL);
 }
 
 
@@ -308,36 +306,36 @@ int thd_destory(hthd_t thd)
 {
     assert(NULL != thd);
     int ret = 0;
-    hThd_pthd_t *hThd = (hThd_pthd_t*)thd;
-    pthread_mutex_lock(&(hThd->mutex));
-    if (THD_STATE_UNCREAT == hThd->state || THD_STATE_EXITED == hThd->state)
+    hthd_pthd_t *hthd = (hthd_pthd_t*)thd;
+    pthread_mutex_lock(&(hthd->mutex));
+    if (THD_STATE_UNCREAT == hthd->state || THD_STATE_EXITED == hthd->state)
     {
-        COM_LOG_ERROR(TAG, "state of thread<%s> is not expected. error state:%s\n", hThd->name, thd_state_str(hThd->state));
+        COM_LOG_ERROR("state of thread<%s> is not expected. error state:%s\n", hthd->name, thd_state_str(hthd->state));
         ret = -1;
         goto end;
     }
 
-    hThd->exit = true;
-    if (THD_STATE_RUNNING != hThd->state)
+    hthd->exit = true;
+    if (THD_STATE_RUNNING != hthd->state)
     {
-        pthread_cond_signal(&(hThd->cond));
+        pthread_cond_signal(&(hthd->cond));
     }
 
-    ret = wait_fb(hThd);
+    ret = wait_fb(hthd);
     if (0 != ret)
     {
-        COM_LOG_WARN(TAG, "wait_fb fail with(%d). thread<%s> got blocked by its task_clear function.\n", ret, hThd->name);
+        COM_LOG_WARN("wait_fb fail with(%d). thread<%s> got blocked by its task_clear function.\n", ret, hthd->name);
     }
 
-    if (THD_STATE_EXITED != hThd->state)
+    if (THD_STATE_EXITED != hthd->state)
     {
-        COM_LOG_ERROR(TAG, "destroy thread<%s> fail, error state: %s\n", hThd->name, thd_state_str(hThd->state));
-        ret = -5;
+        COM_LOG_ERROR("destroy thread<%s> fail, error state: %s\n", hthd->name, thd_state_str(hthd->state));
+        ret = -1;
         goto end;
     }
     ret = 0;
 end:
-    pthread_mutex_unlock(&(hThd->mutex));
+    pthread_mutex_unlock(&(hthd->mutex));
     return ret;
 }
 
@@ -370,18 +368,18 @@ int thd_create_and_start(hthd_t thd)
 thd_state_e thd_state(hthd_t thd)
 {
     assert(NULL != thd);
-    hThd_pthd_t *hThd = (hThd_pthd_t*)thd;
-    pthread_mutex_lock(&(hThd->mutex));
-    thd_state_e ret = hThd->state;
-    pthread_mutex_unlock(&(hThd->mutex));
+    hthd_pthd_t *hthd = (hthd_pthd_t*)thd;
+    pthread_mutex_lock(&(hthd->mutex));
+    thd_state_e ret = hthd->state;
+    pthread_mutex_unlock(&(hthd->mutex));
     return ret;
 }
 
 const char* thd_name(hthd_t thd)
 {
     assert(NULL != thd);
-    hThd_pthd_t *hThd = (hThd_pthd_t*)thd;
-    return (const char*)hThd->name;
+    hthd_pthd_t *hthd = (hthd_pthd_t*)thd;
+    return (const char*)hthd->name;
 }
 
 char*  thd_state_str(thd_state_e state)
@@ -424,31 +422,31 @@ hthd_t thd_handle_new(const char name[16],
     assert(NULL != task_onceopr);
     assert(NULL != task_clear);
 
-    hThd_pthd_t* hThd = (hThd_pthd_t*)malloc(sizeof(hThd_pthd_t) + sizeofparam);
-    if (NULL == hThd)
+    hthd_pthd_t* hthd = (hthd_pthd_t*)malloc(sizeof(hthd_pthd_t) + sizeofparam);
+    if (NULL == hthd)
     {
-        COM_LOG_ERROR(TAG, "malloc fail, sizeof(hThd_pthd_t): %"PRIu64", sizeofparam: %"PRIu64"\n", (uint64_t)sizeof(hThd_pthd_t), (uint64_t)sizeofparam);
+        COM_LOG_ERROR("malloc fail, sizeof(hthd_pthd_t): %"PRIu64", sizeofparam: %"PRIu64"\n", (uint64_t)sizeof(hthd_pthd_t), (uint64_t)sizeofparam);
         return NULL;
     }
-    memset(hThd, 0, sizeof(hThd_pthd_t) + sizeofparam);
+    memset(hthd, 0, sizeof(hthd_pthd_t) + sizeofparam);
 
-    hThd->state = THD_STATE_UNCREAT;
-    strncpy(hThd->name, name, (sizeof(hThd->name) - 1));
-    hThd->timeout = -1;
-    hThd->start_routine = start_routine;
-    (void)hThd->thd;// will init in thd_create
-    pthread_mutex_init(&(hThd->mutex), NULL);
-    pthread_cond_init(&(hThd->cond), NULL);
-    hThd->stop = false;
-    hThd->exit = false;
-    hThd->task_init = task_init;
-    hThd->task_onceopr = task_onceopr;
-    hThd->task_clear = task_clear;
+    hthd->state = THD_STATE_UNCREAT;
+    strncpy(hthd->name, name, (sizeof(hthd->name) - 1));
+    hthd->timeout = -1;
+    hthd->start_routine = start_routine;
+    (void)hthd->thd;// will init in thd_create
+    pthread_mutex_init(&(hthd->mutex), NULL);
+    pthread_cond_init(&(hthd->cond), NULL);
+    hthd->stop = false;
+    hthd->exit = false;
+    hthd->task_init = task_init;
+    hthd->task_onceopr = task_onceopr;
+    hthd->task_clear = task_clear;
     if (NULL != param)
     {
-        memcpy(hThd->ext, param, sizeofparam);
+        memcpy(hthd->ext, param, sizeofparam);
     }
-    return hThd;
+    return hthd;
 }
 
 
@@ -461,11 +459,11 @@ void thd_handle_release(hthd_t thd)
 {
     if (NULL == thd)
     {
-        COM_LOG_WARN(TAG, "param with NULL pointer\n");
+        COM_LOG_WARN("param with NULL pointer\n");
         return;
     }
-    hThd_pthd_t* hThd = (hThd_pthd_t*)thd;
-    pthread_cond_destroy(&(hThd->cond));
-    pthread_mutex_destroy(&(hThd->mutex));
-    free(hThd);
+    hthd_pthd_t* hthd = (hthd_pthd_t*)thd;
+    pthread_cond_destroy(&(hthd->cond));
+    pthread_mutex_destroy(&(hthd->mutex));
+    free(hthd);
 }
