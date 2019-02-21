@@ -28,8 +28,9 @@ extern "C" {
 #include <assert.h>
 #include <stdio.h>
 #include <errno.h>
+#include <time.h>
 
-#define MAGIC_NO (0x58585858) /**<ascii for XXXX*/
+#define MAGIC_NO (0x58585858) /**<ascii for XXXX> remeber change macro name when used in different headers*/
 
 //printf("%s, %d\n", __FUNCTION__, __LINE__);
 
