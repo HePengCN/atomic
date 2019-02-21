@@ -13,6 +13,35 @@
 #include <memmory>
 #include <math.h>
 
+#define MAX(a,b) \
+		({\
+			typeof(a) _a = a;\
+			typeof(b) _b = b;\
+			(void)(&_a == &_b);\
+			((_a)>(_b)?(_a):(_b));\
+		})
+
+#define MIN(a,b) \
+		({\
+			typeof(a) _a = a;\
+			typeof(b) _b = b;\
+			(void)(&_a == &_b);\
+			((_a)<(_b)?(_a):(_b));\
+		})
+
+/*测试
+注: void语句的作用，当代码中是两个不同类型比较时，编译会给出警告。但测试的结果是符合代码的。
+int main(int argc, char* argv[]) {
+	int a = -1;
+	int b = 1;
+	int c = MAX((unsigned int)a, b);
+	int d = MIN((unsigned int)a, b);
+	printf("MAX: c = %d. MIN: d = %d\n", c, d);
+	return 0;
+}
+*/
+
+
 /*
 *Notice When Using: must remember to check if(NULL == shard_ptr.get());
 *memory alloc fail should be considered.
