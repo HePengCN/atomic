@@ -1,10 +1,16 @@
+#include <sys/syscall.h>
+#include <unistd.h>
+#include <sys/time.h>
 #include <assert.h>
 #include <string.h>
 #include <stdio.h>
 #include <pthread.h>
+#include <errno.h>
 #include <stdbool.h>
 #include "xqueue.h"
-#include "com_log.h"
+#include "xqueue_log.h"
+
+#define gettid() syscall(__NR_gettid)
 
 typedef struct xnode
 {
@@ -18,51 +24,109 @@ typedef struct xqueue
     xnode_t *head;
     xnode_t *tail;
     uint32_t count;
-    int max_count;
-    uint32_t msgmaxlen;
+    uint32_t max_count;
+    uint32_t msg_max_len;
     pthread_mutex_t mutex;
     pthread_cond_t cond;
 } xqueue_t;
 
-static void free_oldest_one(xqueue_t* hqueue)
+static void free_oldest_one(xqueue_t* queue)
 {
-    assert(hqueue->count > 0);
-    xnode_t *tmp = hqueue->head;
-    hqueue->head = hqueue->head->next;
+    assert(queue->count > 0);
+    xnode_t *tmp = queue->head;
+    queue->head = queue->head->next;
     free(tmp);
-    hqueue->count--;
-    if (0 == hqueue->count)
+    queue->count--;
+    if (queue->count == 0)
     {
-        hqueue->tail = NULL;
+        queue->tail = NULL;
     }
 }
 
-static void mkdata_for_user(xqueue_t* hqueue, void* pdata, uint32_t* pdata_size)
+static void mkdata_for_user(xqueue_t* queue, void* data, uint32_t* data_size)
 {
-    *pdata_size = hqueue->head->data_size;
-    memcpy(pdata, hqueue->head->data, *pdata_size);
+    *data_size = queue->head->data_size;
+    memcpy(data, queue->head->data, *data_size);
 }
+
+static struct timespec get_outtime(int msec)
+{
+    struct timeval now;
+    struct timespec outtime;
+
+    gettimeofday(&now, NULL);
+    outtime.tv_sec = now.tv_sec + msec / 1000;
+    outtime.tv_nsec = now.tv_usec * 1000 + (msec % 1000) * 1000000l;
+    return outtime;
+}
+
+static int timewait_and_mkdata(hqueue_t hqueue, void* data, uint32_t* data_size, int timeout_msec, bool isdequeue)
+{
+    xqueue_t* queue = (xqueue_t*)hqueue;
+    int ret = XQUEUE_RET_OK;
+    pthread_mutex_lock(&(queue->mutex));
+    if (queue->count == 0)
+    {
+        if (timeout_msec < 0)
+        {
+            ret = pthread_cond_wait(&(queue->cond), &(queue->mutex));
+        }
+        else
+        {
+            struct timespec outtime = get_outtime(timeout_msec);
+            ret = pthread_cond_timedwait(&(queue->cond), &(queue->mutex), &outtime);
+        }
+
+        if (ret == ETIMEDOUT)
+        {
+            COM_LOG_INFO("pthread_cond_timedwait TIMEOUT, error no: %d\n", ret);
+            ret = XQUEUE_RET_TIMEOUT;
+            goto end;
+        }
+
+        if (ret != 0)
+        {
+            COM_LOG_ERROR("pthread_cond_wait return fail, error no: %d\n", ret);
+            ret = XQUEUE_RET_ERROR;
+            goto end;
+        }
+    }
+
+    mkdata_for_user(queue, data, data_size);
+
+    if (isdequeue)
+    {
+        free_oldest_one(queue);
+    }
+
+end:
+    pthread_mutex_unlock(&(queue->mutex));
+    return ret;
+}
+
 
 /*************************************************
 @brief create a new thread safe FIFO queue, in which random length data can push and pop,
        so you should indicate the max length of data you will deal with.
        should call xqueue_destory when user done.
-@param msgmaxlen:
+@param msg_max_len:
        the max length of data you will deal with;
 @return if ok: the new handle;
         if fail: return NULL.
 *************************************************/
-hqueue_t xqueue_new(uint32_t msgmaxlen)
+hqueue_t xqueue_create(uint32_t msg_max_len)
 {
     xqueue_t* hqueue = (xqueue_t*)malloc(sizeof(xqueue_t));
-    if (NULL == hqueue)
+    if (hqueue == NULL)
     {
         COM_LOG_ERROR("malloc fail: sizeof(xqueue_t): %"PRIu64"\n", (uint64_t)sizeof(xqueue_t));
         return NULL;
     }
     memset(hqueue, 0, sizeof(xqueue_t));
-    hqueue->max_count = -1;
-    hqueue->msgmaxlen = msgmaxlen;
+    hqueue->head = NULL;
+    hqueue->tail = NULL;
+    hqueue->max_count = 0;
+    hqueue->msg_max_len = msg_max_len;
     pthread_cond_init(&(hqueue->cond), NULL);
     pthread_mutex_init(&(hqueue->mutex), NULL);
     return (hqueue_t)hqueue;
@@ -73,77 +137,70 @@ hqueue_t xqueue_new(uint32_t msgmaxlen)
 @param hqueue: the handle of the queue.
 @return
 *************************************************/
-void xqueue_destory(hqueue_t queue)
+void xqueue_destory(hqueue_t hqueue)
 {
-    if (NULL == queue)
+    if (hqueue == NULL)
     {
         return;
     }
-    xqueue_t* hqueue = (xqueue_t*)queue;
-    while (!xqueue_empty(hqueue))
+    xqueue_t* queue = (xqueue_t*)hqueue;
+    while (queue->count != 0)
     {
-        free_oldest_one(hqueue);
+        free_oldest_one(queue);
     }
-    pthread_cond_destroy(&(hqueue->cond));
-    pthread_mutex_destroy(&(hqueue->mutex));
+    pthread_cond_destroy(&(queue->cond));
+    pthread_mutex_destroy(&(queue->mutex));
     free(hqueue);
 }
 
 /*************************************************
-@brief push one msg to the queue
+@brief enqueue one msg to the queue
 @param hqueue: the handle of the queue.
        data: the data buffer;
        data_size: the size of the data;
 @return if ok: 0;
         if fail: <0;
 *************************************************/
-int  xqueue_push(hqueue_t queue, const void* pdata, uint32_t data_size)
+int xqueue_enqueue(hqueue_t hqueue, const void* data, uint32_t data_size)
 {
-    assert(NULL != queue);
-    xqueue_t* hqueue = (xqueue_t*)queue;
-    if (0 == hqueue->max_count)
-    {
-        COM_LOG_INFO("max_count has been set to 0, which means diable all push operation.");
-        return 0;
-    }
-    assert(data_size <= hqueue->msgmaxlen);
-    int ret = 0;
-    pthread_mutex_lock(&(hqueue->mutex));
-    xnode_t* new = (xnode_t*)malloc(sizeof(xnode_t) + data_size);
-    if (NULL == new)
+    assert(hqueue != NULL);
+    xqueue_t* queue = (xqueue_t*)hqueue;
+    assert(data_size <= queue->msg_max_len);
+
+    xnode_t* new_node = (xnode_t*)malloc(sizeof(xnode_t) + data_size);
+    if (new_node == NULL)
     {
         COM_LOG_ERROR("malloc xnode fail: sizeof(xnode_t): %"PRIu64", data_size: %u\n", (uint64_t)sizeof(xnode_t), data_size);
-        ret = -1;
-        goto end;
-    }
-    memset(new, 0, sizeof(xnode_t) + data_size);
-    memcpy(new->data, pdata, data_size);
-    new->data_size = data_size;
-
-    if (hqueue->max_count > 0 && hqueue->count == hqueue->max_count)
-    {
-        COM_LOG_INFO("reached max_count: %d, dropped the oldest one.\n", hqueue->max_count);
-        free_oldest_one(hqueue);
+        return XQUEUE_RET_ERROR;
     }
 
-    if (0 == hqueue->count)
+    memset(new_node, 0, sizeof(xnode_t) + data_size);
+    memcpy(new_node->data, data, data_size);
+    new_node->data_size = data_size;
+
+    pthread_mutex_lock(&(queue->mutex));
+    if (queue->max_count != 0 && queue->count == queue->max_count)
     {
-        hqueue->head = new;
+        COM_LOG_INFO("reached max_count: %d, dropped the oldest one.\n", queue->max_count);
+        free_oldest_one(queue);
+    }
+
+    if (queue->count == 0)
+    {
+        queue->head = new_node;
     }
     else
     {
-        hqueue->tail->next = new;
+        queue->tail->next = new_node;
     }
-    hqueue->tail = new;
-    hqueue->count++;
+    queue->tail = new_node;
 
-end:
-    if (0 == ret)
-    {
-        pthread_cond_signal(&(hqueue->cond));
-    }
-    pthread_mutex_unlock(&(hqueue->mutex));
-    return ret;
+    queue->count++;
+
+    pthread_cond_signal(&(queue->cond));
+
+    pthread_mutex_unlock(&(queue->mutex));
+    return XQUEUE_RET_OK;
 }
 
 
@@ -155,85 +212,84 @@ end:
 @return if ok: true;
         if fail: false;
 *************************************************/
-bool  xqueue_empty(hqueue_t queue)
+bool xqueue_isempty(hqueue_t hqueue)
 {
-    assert(NULL != queue);
-    xqueue_t* hqueue = (xqueue_t*)queue;
+    assert(hqueue != NULL);
+    xqueue_t* queue = (xqueue_t*)hqueue;
     bool ret = true;
-    pthread_mutex_lock(&(hqueue->mutex));
-    ret = (0 == hqueue->count);
-    pthread_mutex_unlock(&(hqueue->mutex));
+    pthread_mutex_lock(&(queue->mutex));
+    ret = (queue->count == 0);
+    pthread_mutex_unlock(&(queue->mutex));
     return ret;
 }
 
 
 /*************************************************
-@brief try pop the head data from the queue,
-       ok if queue is not empty, faile if the queue is empty.
+@brief try dequeue the head data from the queue,
+       ok if queue is not empty, fail if the queue is empty.
 @param hqueue: the handle of the queue.
        data: the data buffer;
        data_size: the size of the data;
 @return if ok: true;
         if fail: false;
 *************************************************/
-bool  xqueue_try_pop(hqueue_t queue, void* pdata, uint32_t* pdata_size)
+bool xqueue_try_dequeue(hqueue_t hqueue, void* data, uint32_t* data_size)
 {
-    assert(NULL != queue);
-    xqueue_t* hqueue = (xqueue_t*)queue;
+    assert(hqueue != NULL);
+    xqueue_t* queue = (xqueue_t*)hqueue;
     bool ret = true;
-    pthread_mutex_lock(&(hqueue->mutex));
-    if (0 == hqueue->count)
+    pthread_mutex_lock(&(queue->mutex));
+    if (queue->count == 0)
     {
         ret = false;
         goto end;
     }
 
-    mkdata_for_user(hqueue, pdata, pdata_size);
+    mkdata_for_user(queue, data, data_size);
 
-    free_oldest_one(hqueue);
+    free_oldest_one(queue);
 end:
-    pthread_mutex_unlock(&(hqueue->mutex));
+    pthread_mutex_unlock(&(queue->mutex));
     return ret;
 }
 
 
 /*************************************************
-@brief wait until the queue is not empty, then pop the data.
+@brief time wait until the queue is not empty, then dequeue the data.
+@param hqueue: the handle of the queue.
+       data: the data buffer;
+       data_size: the size of the data;
+       timeout_msec: timeout value in millisecond.
+@return if ok: 0;
+        if error: <0;
+        timeout: 1;
+*************************************************/
+int xqueue_timewait_and_dequeue(hqueue_t hqueue, void* data, uint32_t* data_size, int timeout_msec)
+{
+    assert(hqueue != NULL);
+    return timewait_and_mkdata(hqueue, data, data_size, timeout_msec, true);
+}
+
+
+
+/*************************************************
+@brief wait until the queue is not empty, then dequeue the data.
 @param hqueue: the handle of the queue.
        data: the data buffer;
        data_size: the size of the data;
 @return if ok: 0;
         if fail: <0;
 *************************************************/
-int xqueue_wait_and_pop(hqueue_t queue, void* pdata, uint32_t* pdata_size)
+int xqueue_wait_and_dequeue(hqueue_t hqueue, void* data, uint32_t* data_size)
 {
-    assert(NULL != queue);
-    xqueue_t* hqueue = (xqueue_t*)queue;
-    int ret = 0;
-    pthread_mutex_lock(&(hqueue->mutex));
-    if (0 == hqueue->count)
-    {
-        ret = pthread_cond_wait(&(hqueue->cond), &(hqueue->mutex));
-        if (0 != ret)
-        {
-            COM_LOG_ERROR("pthread_cond_wait return fail, error no: %d\n", ret);
-            goto end;
-        }
-    }
+    assert(hqueue != NULL);
 
-    mkdata_for_user(hqueue, pdata, pdata_size);
-
-    free_oldest_one(hqueue);
-
-end:
-    pthread_mutex_unlock(&(hqueue->mutex));
-    return ret;
-
+    return xqueue_timewait_and_dequeue(hqueue, data, data_size, -1);
 }
 
 
 /*************************************************
-@brief try read but not pop the head data from the queue,
+@brief try read but not dequeue the head data from the queue,
        ok if queue is not empty, faile if the queue is empty.
 @param hqueue: the handle of the queue.
        data: the data buffer;
@@ -241,25 +297,41 @@ end:
 @return if ok: true;
         if fail: false;
 *************************************************/
-bool  xqueue_try_front(hqueue_t queue, void* pdata, uint32_t* pdata_size)
+bool xqueue_try_front(hqueue_t hqueue, void* data, uint32_t* data_size)
 {
-    assert(NULL != queue);
-    xqueue_t* hqueue = (xqueue_t*)queue;
+    assert(hqueue != NULL);
+    xqueue_t* queue = (xqueue_t*)hqueue;
     bool ret = true;
-    pthread_mutex_lock(&(hqueue->mutex));
-    if (0 == hqueue->count)
+    pthread_mutex_lock(&(queue->mutex));
+    if (queue->count == 0)
     {
         ret = false;
         goto end;
     }
 
-    mkdata_for_user(hqueue, pdata, pdata_size);
+    mkdata_for_user(queue, data, data_size);
 
 end:
-    pthread_mutex_unlock(&(hqueue->mutex));
+    pthread_mutex_unlock(&(queue->mutex));
     return ret;
-
 }
+
+/*************************************************
+@brief time wait until the queue is not empty, then read but not dequeue the data.
+@param hqueue: the handle of the queue.
+       data: the data buffer;
+       data_size: the size of the data;
+       timeout_msec: timeout value in millisecond.
+@return if ok: 0;
+        if error: <0;
+        timeout: 1;
+*************************************************/
+int xqueue_timewait_and_front(hqueue_t hqueue, void* data, uint32_t* data_size, int timeout_msec)
+{
+    assert(hqueue != NULL);
+    return timewait_and_mkdata(hqueue, data, data_size, timeout_msec, false);
+}
+
 
 
 /*************************************************
@@ -270,28 +342,10 @@ end:
 @return if ok: 0;
         if fail: <0;
 *************************************************/
-int  xqueue_wait_and_front(hqueue_t queue, void* pdata, uint32_t* pdata_size)
+int xqueue_wait_and_front(hqueue_t hqueue, void* data, uint32_t* data_size)
 {
-    assert(NULL != queue);
-    xqueue_t* hqueue = (xqueue_t*)queue;
-    int ret = 0;
-    pthread_mutex_lock(&(hqueue->mutex));
-    if (0 == hqueue->count)
-    {
-        ret = pthread_cond_wait(&(hqueue->cond), &(hqueue->mutex));
-        if (0 != ret)
-        {
-            COM_LOG_ERROR("pthread_cond_wait return fail, error no: %d\n", ret);
-            goto end;
-        }
-    }
-
-    mkdata_for_user(hqueue, pdata, pdata_size);
-
-end:
-    pthread_mutex_unlock(&(hqueue->mutex));
-    return ret;
-
+    assert(hqueue != NULL);
+    return xqueue_timewait_and_front(hqueue, data, data_size, -1);
 }
 
 
@@ -300,14 +354,14 @@ end:
 @param hqueue: the handle of the queue.
 @return data cout
 *************************************************/
-uint32_t xqueue_size(hqueue_t queue)
+uint32_t xqueue_size(hqueue_t hqueue)
 {
-    assert(NULL != queue);
-    xqueue_t* hqueue = (xqueue_t*)queue;
+    assert(hqueue != NULL);
+    xqueue_t* queue = (xqueue_t*)hqueue;
     uint32_t size = 0;
-    pthread_mutex_lock(&(hqueue->mutex));
-    size = hqueue->count;
-    pthread_mutex_unlock(&(hqueue->mutex));
+    pthread_mutex_lock(&(queue->mutex));
+    size = queue->count;
+    pthread_mutex_unlock(&(queue->mutex));
     return size;
 }
 
@@ -317,26 +371,25 @@ uint32_t xqueue_size(hqueue_t queue)
 @param hqueue: the handle of the queue.
 @return max length
 *************************************************/
-uint32_t xqueue_msg_maxlen(hqueue_t queue)
+uint32_t xqueue_msg_max_len(hqueue_t hqueue)
 {
-    assert(NULL != queue);
-    xqueue_t* hqueue = (xqueue_t*)queue;
-    return hqueue->msgmaxlen;
+    assert(hqueue != NULL);
+    xqueue_t* queue = (xqueue_t*)hqueue;
+    return queue->msg_max_len;
 }
 
 /*************************************************
 @brief set the max item count of the queue.
        when the item number reachs the max count, the oldest item will be dropped.
 @param hqueue: the handle of the queue.
-       count: <0 means no limit; = 0 diable all push operation; >0  means count is the max number.
+       max_count: =0 means no limit; >0  means count is the max number.
 @return void
 *************************************************/
-void xqueue_set_max_count(hqueue_t queue, int max_count)
+void xqueue_set_max_count(hqueue_t hqueue, uint32_t max_count)
 {
-    assert(NULL != queue);
-    xqueue_t* hqueue = (xqueue_t*)queue;
-    pthread_mutex_lock(&(hqueue->mutex));
-    hqueue->max_count = max_count;
-    pthread_mutex_unlock(&(hqueue->mutex));
+    assert(hqueue != NULL);
+    xqueue_t* queue = (xqueue_t*)hqueue;
+    pthread_mutex_lock(&(queue->mutex));
+    queue->max_count = max_count;
+    pthread_mutex_unlock(&(queue->mutex));
 }
-
