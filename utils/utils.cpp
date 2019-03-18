@@ -10,6 +10,91 @@
 #pragma once
 #include "utils.hpp"
 #include <sys/time.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+#include <execinfo.h>
+
+
+#define gettid() syscall(__NR_gettid)
+
+
+void sig_SIGSEGV_handler_dump(int signo)
+{
+    printf("%s, tid: %d\n", __FUNCTION__, (int)gettid());
+
+    void *buffer[30] = {0};
+    size_t size;
+    char **strings = NULL;
+    size_t i = 0;
+
+    size = backtrace(buffer, 30);
+    fprintf(stdout, "Obtained %zd stack frames.nm\n", size);
+    strings = backtrace_symbols(buffer, size);
+    if (strings == NULL)
+    {
+        perror("backtrace_symbols.");
+        exit(EXIT_FAILURE);
+    }
+
+    for (i = 0; i < size; i++)
+    {
+        fprintf(stdout, "%s\n", strings[i]);
+    }
+    free(strings);
+    strings = NULL;
+    exit(0);
+}
+
+
+void input_command()
+{
+    char buf[128];
+    memset(buf, 0, sizeof(128));
+
+    int i = 0;
+    printf("INPUT COMMAND or CTRL-D:\n");
+    while (NULL != fgets(buf, sizeof(buf), stdin))
+    {
+        int len = strlen(buf);
+        if (len > 0)
+        {
+            buf[len - 1] = '\0'; //  '\n' to '\0'
+        }
+        printf("GET COMMAND: %s\n", buf);
+        (void)system(buf);
+        printf("INPUT COMMAND or CTRL-D:\n");
+
+        memset(buf, 0, sizeof(128));
+    }
+}
+
+
+static bool get_name_by_pid(pid_t pid, char *name)
+{
+    FILE *fptr;
+    bool ret = false;
+    char cmd[NAME_MAX];
+    memset(cmd, 0, sizeof(cmd));
+    sprintf(cmd, "basename `readlink -f /proc/%d/exe`", pid);
+
+    if ((fptr = popen(cmd, "r")) != NULL)
+    {
+        if (fgets(name, NAME_MAX, fptr) != NULL)
+        {
+            int len = strlen(name);
+            if (len > 0)
+            {
+                name[len - 1] = '\0'; //change '\n' to '\0'
+            }
+            ret = true;
+        }
+    }
+
+    pclose(fptr);
+
+    return ret;
+}
+
 
 /*
 *Notice When Using: acording your actual demand, you can change the print format.
@@ -22,13 +107,13 @@ std::string Time2string(uint64_t utc_ms)
     char buf[256];
     memset(buf, 0, sizeof(buf));
 
-    int sub_msec = utc_ms%1000;
-    time_t sub_sec = utc_ms/1000;
+    int sub_msec = utc_ms % 1000;
+    time_t sub_sec = utc_ms / 1000;
 
     struct tm bkTime;
     gmtime_r(&sub_sec, &bkTime);
 
-    snprintf(buf, sizeof(buf), PRINTFORMAT, (bkTime.tm_year+1900), (bkTime.tm_mon+1), bkTime.tm_mday, bkTime.tm_hour, bkTime.tm_min, bkTime.tm_sec, sub_msec);
+    snprintf(buf, sizeof(buf), PRINTFORMAT, (bkTime.tm_year + 1900), (bkTime.tm_mon + 1), bkTime.tm_mday, bkTime.tm_hour, bkTime.tm_min, bkTime.tm_sec, sub_msec);
     str.assign(buf);
     return str;
 }
@@ -36,13 +121,15 @@ std::string Time2string(uint64_t utc_ms)
 void split(const std::string& s, const std::string& delim, std::vector<std::string>& ret)
 {
     size_t last = 0;
-    size_t index=s.find_first_of(delim,last);
-    while (index!=std::string::npos) {
-        ret.push_back(s.substr(last,index-last));
-        last=index+ delim.length();
-        index=s.find_first_of(delim,last);
+    size_t index = s.find_first_of(delim, last);
+    while (index != std::string::npos)
+    {
+        ret.push_back(s.substr(last, index - last));
+        last = index + delim.length();
+        index = s.find_first_of(delim, last);
     }
-    if(last < s.length()) {
+    if (last < s.length())
+    {
         ret.push_back(s.substr(last));
     }
 }
@@ -61,7 +148,8 @@ time_t  my_gmktime(register struct tm *t)
     result += (year -  1968) / 4;
     result -= (year -  1900) / 100;
     result += (year -  1600) / 400;
-    if  ((year % 4) == 0 && ((year % 100) != 0 || (year % 400) == 0) && (t->tm_mon % MONTHSPERYEAR) < 2) {
+    if ((year % 4) == 0 && ((year % 100) != 0 || (year % 400) == 0) && (t->tm_mon % MONTHSPERYEAR) < 2)
+    {
         result-- ;
     }
     result += t->tm_mday -  1;
@@ -71,10 +159,10 @@ time_t  my_gmktime(register struct tm *t)
     result += t->tm_min;
     result *= 60;
     result += t->tm_sec;
-    if  (t->tm_isdst == 1)
+    if (t->tm_isdst == 1)
         result -= 3600;
     /*@ - matchanyintegral @*/
-    return  (result);
+    return (result);
 }
 
 /*
@@ -101,7 +189,7 @@ uint64_t gmktimeFrStr(std::string timeStr)
     brk_tm.tm_mon  -= 1;
 
     sec = my_gmktime(&brk_tm);
-    return sec*(uint64_t)1000 + ms;
+    return sec * (uint64_t)1000 + ms;
 }
 
 
@@ -112,14 +200,16 @@ std::string loadBinFile(const char* filePath)
 {
     std::string str;
     struct stat statBuf;
-    if(0 != stat(filePath, &statBuf)) {
+    if (0 != stat(filePath, &statBuf))
+    {
         printf("%s:%d: Error: stat file %s fail\n", __FUNCTION__, __LINE__, filePath);
         return str;
     }
     str.resize(statBuf.st_size);
 
     FILE *fd = fopen(filePath, "r");
-    if(!fd) {
+    if (!fd)
+    {
         printf("%s:%d: Error: open file %s fail\n", __FUNCTION__, __LINE__, filePath);
         return str;
     }
@@ -137,7 +227,7 @@ double xConvertLat(const std::string &lat)
     /*for example: 4229.42689*/
     int degree = atoi(lat.substr(0, 2).c_str());
     double min = atof(lat.substr(2).c_str());
-    return degree + min/60.0;
+    return degree + min / 60.0;
 }
 
 /*
@@ -148,7 +238,7 @@ double xConvertLng(const std::string &lng)
     /*for example: 08308.18995*/
     int degree = atoi(lng.substr(0, 3).c_str());
     double min = atof(lng.substr(3).c_str());
-    return degree + min/60.0;
+    return degree + min / 60.0;
 }
 
 bool getTotalBytesOfRecFiles(std::string& folder_path, uint64_t &totalBytes)
@@ -157,20 +247,25 @@ bool getTotalBytesOfRecFiles(std::string& folder_path, uint64_t &totalBytes)
     DIR *dir;
     struct dirent *ptr;
 
-    if (NULL == (dir=opendir(folder_path.c_str()))) {
-        e(CONTROLTAG,"Open folder %s fail: %s", folder_path.c_str(), strerror(errno));
+    if (NULL == (dir = opendir(folder_path.c_str())))
+    {
+        e(CONTROLTAG, "Open folder %s fail: %s", folder_path.c_str(), strerror(errno));
         return false;
     }
 
-    while ((ptr=readdir(dir)) != NULL) {
-        if(0 == strcmp(ptr->d_name,".") || 0 == strcmp(ptr->d_name,".."))
+    while ((ptr = readdir(dir)) != NULL)
+    {
+        if (0 == strcmp(ptr->d_name, ".") || 0 == strcmp(ptr->d_name, ".."))
             continue;
-        else if(DT_REG == ptr->d_type) {
+        else if (DT_REG == ptr->d_type)
+        {
             size_t len = strlen(ptr->d_name);
-            if(len < 4) {
+            if (len < 4)
+            {
                 continue;
             }
-            if(0 == strcmp(&((ptr->d_name)[len-4]),".rtv")) {
+            if (0 == strcmp(&((ptr->d_name)[len - 4]), ".rtv"))
+            {
                 std::string file(folder_path);
                 file.append("/");
                 file.append(ptr->d_name);
@@ -178,8 +273,12 @@ bool getTotalBytesOfRecFiles(std::string& folder_path, uint64_t &totalBytes)
                 stat(file.c_str(), &statbuf);
                 totalBytes += statbuf.st_size;
             }
-        } else if(DT_LNK == ptr->d_type) {
-        } else if(DT_DIR == ptr->d_type) {
+        }
+        else if (DT_LNK == ptr->d_type)
+        {
+        }
+        else if (DT_DIR == ptr->d_type)
+        {
         }
 
     }
@@ -190,7 +289,7 @@ bool getTotalBytesOfRecFiles(std::string& folder_path, uint64_t &totalBytes)
 uint64_t getCurrentTime()
 {
     struct timeval tv;
-    gettimeofday(&tv,NULL);
+    gettimeofday(&tv, NULL);
     return tv.tv_sec * (uint64_t)1000 + tv.tv_usec / (uint64_t)1000;
 }
 
@@ -201,14 +300,18 @@ uint64_t getCurrentTime()
 std::string getFileName(std::string filePath, bool withSuffix)
 {
     size_t pos = filePath.rfind('/');
-    if(std::string::npos == pos) {
+    if (std::string::npos == pos)
+    {
         return filePath;
     }
 
-    if(withSuffix) {
-        return filePath.substr(pos+1);
-    } else {
-        return filePath.substr(pos+1, (filePath.rfine('.')-1) - pos);
+    if (withSuffix)
+    {
+        return filePath.substr(pos + 1);
+    }
+    else
+    {
+        return filePath.substr(pos + 1, (filePath.rfine('.') - 1) - pos);
     }
 }
 
@@ -219,33 +322,40 @@ std::string getFileName(std::string filePath, bool withSuffix)
 std::string getFileDirName(std::string filePath, bool withPrefix)
 {
     size_t pos = filePath.rfind('/');
-    if(std::string::npos == pos) {
+    if (std::string::npos == pos)
+    {
         return ".";
     }
 
     std::string res = filePath.substr(0, pos);
 
-    if(withPrefix) {
+    if (withPrefix)
+    {
         return res;
-    } else {
+    }
+    else
+    {
         pos = res.rfind('/');
-        if(std::string::npos == pos) {
+        if (std::string::npos == pos)
+        {
             return res;
         }
-        return res.substr(pos+1);
+        return res.substr(pos + 1);
     }
 }
 
 void readline(char *filePath)
 {
     std::ifstream fin(filePath);
-    if(!fin.is_open()) {
+    if (!fin.is_open())
+    {
         printf("%s:%d: Error: open %s fail: %s\n", __func__, __LINE__, filePath, strerror(errno));
         return -2;
     }
 
     std::string line;
-    while(fin >> line) {
+    while (fin >> line)
+    {
 
     }
     fin.close();
@@ -262,10 +372,12 @@ void read_stdin_loop()
     char buffer[BUFFERSIZE];
     memset(buffer, 0, BUFFERSIZE);
 
-    while(NULL != fgets(buffer, BUFFERSIZE, stdin)) {
+    while (NULL != fgets(buffer, BUFFERSIZE, stdin))
+    {
         int len = strlen(buffer);
-        if(len > 0) {
-            buffer[len-1] = '\0'; //  '\n' to '\0'
+        if (len > 0)
+        {
+            buffer[len - 1] = '\0'; //  '\n' to '\0'
         }
         /*
         *DO THINGS HERE
