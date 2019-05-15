@@ -1,6 +1,6 @@
 #!/bin/bash
 
-test_name="test_mutex_x86"
+test_name="test_sigmask_x86"
 
 script_dir=`dirname $(readlink -f $0)`
 

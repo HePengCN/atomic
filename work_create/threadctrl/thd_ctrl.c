@@ -202,7 +202,7 @@ static void* start_routine(hthd_pthd_t* hthd)
             ret = hthd->task_onceopr((void*)(hthd->ext));
             if (ret == RET_EXIT)
             {
-                COM_LOG_ERROR("task_onceopr of thread<%s> return fail, error no: %d\n", hthd->name, ret);
+                COM_LOG_INFO("task_onceopr of thread<%s> return RET_EXIT, thread about to exit.\n", hthd->name);
                 pthread_mutex_lock(&(hthd->mutex));
                 hthd->exit = true;
                 pthread_mutex_unlock(&(hthd->mutex));
@@ -416,7 +416,7 @@ int thd_destroy(hthd_t thd)
     pthread_mutex_lock(&(hthd->mutex));
     if (hthd->state == THD_STATE_UNCREAT || hthd->state == THD_STATE_EXITED)
     {
-        COM_LOG_ERROR("state of thread<%s> is not expected. error state:%s\n", hthd->name, thd_state_str(hthd->state));
+        COM_LOG_WARN("state of thread<%s> is not expected. error state:%s\n", hthd->name, thd_state_str(hthd->state));
         pthread_mutex_unlock(&(hthd->mutex));
         return -1;
     }
@@ -454,6 +454,27 @@ int thd_destroy(hthd_t thd)
     return 0;
 }
 
+/*************************************************
+@brief first check if the thread is alive, then destroy the thread,
+       when this function return ,the new thread is in the THD_STATE_EXITED or THD_STATE_UNCREAT state;
+@param thd: handle of the thread;
+@return if ok, 0;
+        if fali, <0;
+*************************************************/
+int thd_check_alive_and_destroy(hthd_t thd)
+{
+    assert(thd != NULL);
+    if (thd_state(thd) == THD_STATE_UNCREAT || thd_state(thd) == THD_STATE_EXITED)
+    {
+        return 0;
+    }
+
+    return thd_destroy(thd);
+}
+
+
+
+/*
 int thd_destroy_normal(hthd_t thd)
 {
     assert(thd != NULL);
@@ -490,6 +511,7 @@ end:
     pthread_mutex_unlock(&(hthd->mutex));
     return ret;
 }
+*/
 
 
 /*************************************************
