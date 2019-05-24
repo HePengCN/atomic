@@ -24,7 +24,7 @@ typedef struct hthd_pthd
 {
     volatile thd_state_t state;
     char name[THD_NAME_MAX_LENGTH + 1]; //thread name
-    int tid; //thread id;
+    pid_t tid; //thread id;
     int timeout; //timeout of ctrl waiting: in msec
     void* (*start_routine)(struct hthd_pthd*);
     thd_sched_param_t sched_param;
@@ -583,6 +583,7 @@ int thd_set_sched(hthd_t thd, const thd_sched_param_t* thd_sched_param)
     assert(thd_sched_param->sched_priority >= 1 && thd_sched_param->sched_priority <= 99);
     int ret = 0;
     hthd_pthd_t *hthd = (hthd_pthd_t*)thd;
+    assert(hthd->state != THD_STATE_UNCREAT && hthd->state != THD_STATE_EXITED);
 
     hthd->sched_param = *thd_sched_param;
 
@@ -649,6 +650,21 @@ int thd_get_sched(hthd_t thd, thd_sched_param_t* sched_param)
     sched_param->sched_policy = to_thd_sched_policy(policy);
     sched_param->sched_priority = to_thd_sched_priority(param.sched_priority);
     return 0;
+}
+
+
+/*************************************************
+@brief return the kernel thread ID(LWP ID);
+       this function should be called after thd_create.
+@param thd: handle of the thread;
+@return the kernel thread ID;
+*************************************************/
+pid_t thd_get_tid(hthd_t thd)
+{
+    assert(thd != NULL);
+    hthd_pthd_t *hthd = (hthd_pthd_t*)thd;
+    assert(hthd->state != THD_STATE_UNCREAT && hthd->state != THD_STATE_EXITED);
+    return hthd->tid;
 }
 
 

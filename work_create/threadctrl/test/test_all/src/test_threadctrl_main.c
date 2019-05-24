@@ -54,8 +54,8 @@ int main(int argc, char* argv[])
 
 
     hthd_t consumer_thread_handler, producer_thread_handler;
-    consumer_thread_handler = consumer_thread_handler_new("consumer_123", hqueue);
     producer_thread_handler = producer_thread_handler_new("procuder_123", hqueue);
+    consumer_thread_handler = consumer_thread_handler_new("consumer_123", hqueue);
 
 
     //hthd_t consumer_thread_handler2;
@@ -122,8 +122,24 @@ int main(int argc, char* argv[])
 #endif
 
 #if 1
-    sleep(3);
+    //sleep(3);
 
+
+    thd_pause(consumer_thread_handler);
+    //thd_pause(producer_thread_handler);
+
+    printf("producer state: %s\n", thd_state_str(thd_state(producer_thread_handler)));
+    printf("consumer state: %s\n", thd_state_str(thd_state(consumer_thread_handler)));
+
+    usleep(10 * 1000);
+
+    thd_start(consumer_thread_handler);
+    //thd_start(producer_thread_handler);
+
+    printf("producer state: %s\n", thd_state_str(thd_state(producer_thread_handler)));
+    printf("consumer state: %s\n", thd_state_str(thd_state(consumer_thread_handler)));
+
+    usleep(10 * 1000);
 
     thd_pause(consumer_thread_handler);
     thd_pause(producer_thread_handler);
@@ -131,23 +147,7 @@ int main(int argc, char* argv[])
     printf("producer state: %s\n", thd_state_str(thd_state(producer_thread_handler)));
     printf("consumer state: %s\n", thd_state_str(thd_state(consumer_thread_handler)));
 
-    sleep(3);
-
-    thd_start(consumer_thread_handler);
-    thd_start(producer_thread_handler);
-
-    printf("producer state: %s\n", thd_state_str(thd_state(producer_thread_handler)));
-    printf("consumer state: %s\n", thd_state_str(thd_state(consumer_thread_handler)));
-
-    sleep(3);
-
-    thd_pause(consumer_thread_handler);
-    thd_pause(producer_thread_handler);
-
-    printf("producer state: %s\n", thd_state_str(thd_state(producer_thread_handler)));
-    printf("consumer state: %s\n", thd_state_str(thd_state(consumer_thread_handler)));
-
-    sleep(3);
+    usleep(10 * 1000);
 
     thd_start(consumer_thread_handler);
     thd_start(producer_thread_handler);
@@ -156,7 +156,7 @@ int main(int argc, char* argv[])
     printf("consumer state: %s\n", thd_state_str(thd_state(consumer_thread_handler)));
 
 
-    sleep(3);
+    usleep(10 * 1000);
 #endif
 
 #if 0

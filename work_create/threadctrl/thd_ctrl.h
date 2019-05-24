@@ -1,7 +1,7 @@
 /*
 *******************************************************************
  * Copyright (C):
- * FileName: mcuXcpu_msg.h
+ * FileName: thd_ctrl.h
  * Author:        Version :          Date:
  * Description:
  * Version:
@@ -206,6 +206,14 @@ int thd_get_sched(hthd_t thd, thd_sched_param_t* sched_param);
 @return char pointor for string format of sched policy;
 *************************************************/
 char* thd_sched_policy_str(thd_sched_policy_t policy);
+
+
+/*************************************************
+@brief return the kernel thread ID;
+@param thd: handle of the thread;
+@return the kernel thread ID;
+*************************************************/
+pid_t thd_get_tid(hthd_t thd);
 
 #ifdef __cplusplus
 }
