@@ -159,7 +159,7 @@ static void* start_routine(hthd_pthd_t* hthd)
         return hthd;
     }
 
-    ret = pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
+    ret = pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
     if (ret != 0)
     {
         COM_LOG_ERROR("in thread <%s> pthread_setcanceltype fail. error msg: %s\n", hthd->name, strerror(errno));
@@ -181,6 +181,7 @@ static void* start_routine(hthd_pthd_t* hthd)
     }
 
 
+    /*init done, enter work loop*/
     do
     {
         pthread_cond_wait(&(hthd->cond), &(hthd->mutex));
@@ -227,6 +228,7 @@ static void* start_routine(hthd_pthd_t* hthd)
     while (pause && !exit);
 
     pthread_testcancel();
+
 
     /*enter exit process*/
     ret = hthd->task_clear((void*)(hthd->ext));
@@ -413,6 +415,7 @@ int thd_destroy(hthd_t thd)
     assert(thd != NULL);
     int ret = 0;
     hthd_pthd_t *hthd = (hthd_pthd_t*)thd;
+
     pthread_mutex_lock(&(hthd->mutex));
     if (hthd->state == THD_STATE_UNCREAT || hthd->state == THD_STATE_EXITED)
     {
@@ -464,8 +467,10 @@ int thd_destroy(hthd_t thd)
 int thd_check_alive_and_destroy(hthd_t thd)
 {
     assert(thd != NULL);
-    if (thd_state(thd) == THD_STATE_UNCREAT || thd_state(thd) == THD_STATE_EXITED)
+    thd_state_t state = thd_state(thd);
+    if (state == THD_STATE_UNCREAT || state == THD_STATE_EXITED)
     {
+        COM_LOG_INFO("thread<%s> is not alive, state: %s.\n", thd_name(thd), thd_state_str(state));
         return 0;
     }
 

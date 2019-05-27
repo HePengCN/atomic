@@ -12,6 +12,10 @@ extern "C" {
 hthd_t timer_handle0_new(const char* thdname);
 void timer_handle0_release(hthd_t hthd);
 
+
+hthd_t timer_handle1_new(const char* thdname);
+void timer_handle2_release(hthd_t hthd);
+
 #ifdef __cplusplus
 }
 #endif   /* end of __cplusplus */

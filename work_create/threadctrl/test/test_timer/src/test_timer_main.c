@@ -17,10 +17,18 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/syscall.h>
+#include <pthread.h>
+#include "sigterm_handler.h"
 #include "thd_ctrl.h"
 #include "thd_timer_handle0.h"
 
+
 #define gettid() syscall(__NR_gettid)
+
+typedef hthd_t (*cfp_t)(const char*, ...);
+
+//pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
 
 void sighandler(int sig)
 {
@@ -52,6 +60,8 @@ void input_command()
 
 int main(int argc, char* argv[])
 {
+    //pthread_mutex_lock(&mutex);
+
     int ret;
 
     sigset_t set;
@@ -65,14 +75,20 @@ int main(int argc, char* argv[])
         return -1;
     }
 
-    hthd_t timer_handle0, timer_handle1, timer_handle2;
+
+    cfp_t func;
+
+    func = (cfp_t)timer_handle0_new;
+
+    hthd_t timer_handle0, timer_handle1, timer_handle2, timer_handle3;
 
     timer_handle0 = timer_handle0_new("timer_handle0");
 
     timer_handle1 = timer_handle0_new("timer_handle1");
 
-    timer_handle2 = timer_handle0_new("timer_handle2");
+    timer_handle2 = func("timer_handle2");
 
+    timer_handle3 = timer_handle1_new("timer_handle3");
 
     ret = thd_create_and_start(timer_handle0);
     if (ret != 0)
@@ -95,6 +111,12 @@ int main(int argc, char* argv[])
         return -1;
     }
 
+    ret = thd_create_and_start(timer_handle3);
+    if (ret != 0)
+    {
+        printf("thd_create(timer_handle2) fail, ret: %d\n", ret);
+        return -1;
+    }
 
 
     timer_t timerid;
@@ -187,8 +209,13 @@ int main(int argc, char* argv[])
 
     ret = timer_settime(timerid2, 0, &new_timerspec2, NULL);
 
+#if 0
+    signal_sigterm(NULL);
+    wait_sigterm();
+#else
     //pause();
     input_command();
+#endif
 
     thd_check_alive_and_destroy(timer_handle0);
 
@@ -196,10 +223,13 @@ int main(int argc, char* argv[])
 
     thd_check_alive_and_destroy(timer_handle2);
 
+    thd_check_alive_and_destroy(timer_handle3);
+
 
     timer_handle0_release(timer_handle0);
     timer_handle0_release(timer_handle1);
     timer_handle0_release(timer_handle2);
+    timer_handle0_release(timer_handle3);
 
     return 0;
 }
