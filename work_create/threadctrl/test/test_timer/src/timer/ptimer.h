@@ -15,7 +15,14 @@ htimer_t ptimer_create(pid_t thread_id);
 
 /*************************************************
 @brief
-@param
+@param start_offset_ms:  
+           If  specifies  then arms (starts) the timer, setting it to initially expire at the given time. (If
+       the timer was already armed, then the previous settings are overwritten.)
+       If specifies a zero value then the  timer  is disarmed.
+
+       interval_ms: 
+           Specifies the period of the timer.
+           If specifies a zero value, then the timer expires just once, at the time specified by start_offset_ms.
 @return 0 if ok, others if fail
 *************************************************/
 int ptimer_set(htimer_t htimer, uint32_t start_offset_ms, uint32_t interval_ms);

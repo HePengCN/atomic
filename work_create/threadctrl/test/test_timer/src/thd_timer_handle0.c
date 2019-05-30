@@ -48,7 +48,6 @@ static int task_onceopr(task_param_t* param)
 
     COM_LOG_INFO("tid: %ld, signo: %d, SIGALRM: %d, timer_id: 0x%x\n", gettid(), param->info.si_signo, SIGALRM, param->info.si_timerid);
 
-    //pthread_mutex_lock(&mutex);
     return RET_OK;
 }
 
@@ -82,7 +81,7 @@ typedef struct task_param1
 static int task_init1(task_param1_t* param)
 {
     param->htimer = ptimer_create(0);
-    ptimer_set(param->htimer, 3000, 3500);
+    ptimer_set(param->htimer, 3000, 4000/*0*/);
     COM_LOG_INFO("thread %ld init done\n", gettid());
     return RET_OK;
 }
@@ -90,8 +89,13 @@ static int task_init1(task_param1_t* param)
 static int task_onceopr1(task_param1_t* param)
 {
 
+    static int i = 0;
     ptimer_wait(param->htimer);
-    //pthread_mutex_lock(&mutex);
+    if (i == 2)
+    {
+        ptimer_set(param->htimer, 0, 3500 + 500);
+    }
+    i++;
     return RET_OK;
 }
 
