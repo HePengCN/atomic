@@ -31,12 +31,12 @@ static int task_init(task_param_t* param)
     param->buf = (char*)malloc(param->size);
     if (param->buf == NULL)
     {
-        return -1;
+        return RET_EXIT;
     }
     memset(param->buf, 0, param->size);
     strncpy(param->buf, "abcdefghijklmnopqrstuvwxyz", 26);
     param->size = 26;
-    return 0;
+    return RET_EXIT;
 }
 
 static int task_onceopr(task_param_t* param)

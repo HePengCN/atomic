@@ -80,7 +80,7 @@ int main(int argc, char* argv[])
 
     //input_command();
     printf("main thread sleep in\n");
-    usleep(10 * 1000);
+    usleep(1000 * 1000);
     printf("main thread sleep out\n");
 #if 0
     thd_get_sched(consumer_thread_handler, &out_sched_param);
@@ -131,7 +131,7 @@ int main(int argc, char* argv[])
     printf("producer state: %s\n", thd_state_str(thd_state(producer_thread_handler)));
     printf("consumer state: %s\n", thd_state_str(thd_state(consumer_thread_handler)));
 
-    usleep(10 * 1000);
+    usleep(1000 * 1000);
 
     thd_start(consumer_thread_handler);
     //thd_start(producer_thread_handler);
@@ -139,7 +139,7 @@ int main(int argc, char* argv[])
     printf("producer state: %s\n", thd_state_str(thd_state(producer_thread_handler)));
     printf("consumer state: %s\n", thd_state_str(thd_state(consumer_thread_handler)));
 
-    usleep(10 * 1000);
+    usleep(1000 * 1000);
 
     thd_pause(consumer_thread_handler);
     thd_pause(producer_thread_handler);
@@ -147,7 +147,7 @@ int main(int argc, char* argv[])
     printf("producer state: %s\n", thd_state_str(thd_state(producer_thread_handler)));
     printf("consumer state: %s\n", thd_state_str(thd_state(consumer_thread_handler)));
 
-    usleep(10 * 1000);
+    usleep(1000 * 1000);
 
     thd_start(consumer_thread_handler);
     thd_start(producer_thread_handler);
