@@ -30,6 +30,7 @@ typedef struct xqueue
     uint32_t msg_max_len;
     pthread_mutex_t mutex;
     pthread_cond_t cond;
+    uint32_t pool_alloc_count;
     uint32_t pool_used_count;
     uint32_t pool_used_start;
     char mem_pool[0];
@@ -40,26 +41,26 @@ static inline size_t max_mem_of_node(uint32_t msg_max_len)
     return sizeof(xnode_t) + msg_max_len;
 }
 
-static inline void init_mem_pool(xqueue_t* queue)
+static inline void init_mem_pool(xqueue_t *queue)
 {
     queue->pool_used_count = 0;
     queue->pool_used_start = 0;
 }
 
-static inline bool is_mem_pool_available(xqueue_t* queue)
+static inline bool is_mem_pool_available(xqueue_t *queue)
 {
-    if (queue->pool_used_count == PRE_ALLOCATION_COUNT)
+    if (queue->pool_used_count == queue->pool_alloc_count)
     {
         return false;
     }
     return true;
 }
 
-static inline char* get_mem_from_pool(xqueue_t* queue)
+static inline char *get_mem_from_pool(xqueue_t *queue)
 {
-    assert(queue->pool_used_count < PRE_ALLOCATION_COUNT);
-    int idx = (queue->pool_used_start + queue->pool_used_count) % PRE_ALLOCATION_COUNT;
-    char* mem = queue->mem_pool + idx * max_mem_of_node(queue->msg_max_len);
+    assert(queue->pool_used_count < queue->pool_alloc_count);
+    int idx = (queue->pool_used_start + queue->pool_used_count) % queue->pool_alloc_count;
+    char *mem = queue->mem_pool + idx * max_mem_of_node(queue->msg_max_len);
 
     queue->pool_used_count++;
 
@@ -67,14 +68,14 @@ static inline char* get_mem_from_pool(xqueue_t* queue)
     return mem;
 }
 
-static inline bool is_mem_in_pool(xqueue_t* queue, const char* mem)
+static inline bool is_mem_in_pool(xqueue_t *queue, const char *mem)
 {
     if (mem < queue->mem_pool)
     {
         return false;
     }
 
-    if (mem > queue->mem_pool + (PRE_ALLOCATION_COUNT - 1)*max_mem_of_node(queue->msg_max_len))
+    if (mem > queue->mem_pool + (queue->pool_alloc_count - 1) * max_mem_of_node(queue->msg_max_len))
     {
         return false;
     }
@@ -82,32 +83,32 @@ static inline bool is_mem_in_pool(xqueue_t* queue, const char* mem)
     return true;
 }
 
-static inline void back_mem_to_pool(xqueue_t* queue, char* node)
+static inline void back_mem_to_pool(xqueue_t *queue, char *node)
 {
     assert(queue->pool_used_count > 0);
 
-    char* target = queue->mem_pool + queue->pool_used_start * max_mem_of_node(queue->msg_max_len);
+    char *target = queue->mem_pool + queue->pool_used_start * max_mem_of_node(queue->msg_max_len);
     //COM_LOG_DEBUG("queue->mem_pool: %p, node: %p, target: %p\n", queue->mem_pool, node, target);
     assert(node == target);
 
     memset(target, 0, max_mem_of_node(queue->msg_max_len));
     queue->pool_used_count--;
     queue->pool_used_start++;
-    if (queue->pool_used_start == PRE_ALLOCATION_COUNT || queue->pool_used_count == 0)
+    if (queue->pool_used_start == queue->pool_alloc_count || queue->pool_used_count == 0)
     {
         queue->pool_used_start = 0;
     }
     //COM_LOG_DEBUG("queue->pool_used_start: %u, queue->pool_used_count: %u\n", queue->pool_used_start, queue->pool_used_count);
 }
 
-static void free_oldest_one(xqueue_t* queue)
+static void free_oldest_one(xqueue_t *queue)
 {
     assert(queue->count > 0);
     xnode_t *tmp = queue->head;
     queue->head = queue->head->next;
-    if (is_mem_in_pool(queue, (const char*)tmp))
+    if (is_mem_in_pool(queue, (const char *)tmp))
     {
-        back_mem_to_pool(queue, (char*)tmp);
+        back_mem_to_pool(queue, (char *)tmp);
     }
     else
     {
@@ -120,7 +121,7 @@ static void free_oldest_one(xqueue_t* queue)
     }
 }
 
-static void mkdata_for_user(xqueue_t* queue, void* data, uint32_t* data_size)
+static void mkdata_for_user(xqueue_t *queue, void *data, uint32_t *data_size)
 {
     if (data_size != NULL)
     {
@@ -141,18 +142,25 @@ static struct timespec get_outtime(int msec)
     gettimeofday(&now, NULL);
     outtime.tv_sec = now.tv_sec + msec / 1000;
     outtime.tv_nsec = now.tv_usec * 1000 + (msec % 1000) * 1000000l;
+
+    const uint64_t ONE_NSEC = (uint64_t)1000000000;
+    if (outtime.tv_nsec >= ONE_NSEC)
+    {
+        outtime.tv_sec += 1;
+        outtime.tv_nsec -= ONE_NSEC;
+    }
     return outtime;
 }
 
-static int timewait_and_mkdata(hqueue_t hqueue, void* data, uint32_t* data_size, int timeout_msec, bool isdequeue)
+static int timewait_and_mkdata(hqueue_t hqueue, void *data, uint32_t *data_size, int timeout_msec, bool isdequeue)
 {
     assert(hqueue != NULL);
     //assert(data != NULL);
 
-    xqueue_t* queue = (xqueue_t*)hqueue;
+    xqueue_t *queue = (xqueue_t *)hqueue;
     int ret = XQUEUE_RET_OK;
     pthread_mutex_lock(&(queue->mutex));
-    if (queue->count == 0)
+    while (queue->count == 0)
     {
         if (timeout_msec < 0)
         {
@@ -166,7 +174,7 @@ static int timewait_and_mkdata(hqueue_t hqueue, void* data, uint32_t* data_size,
 
         if (ret == ETIMEDOUT)
         {
-            COM_LOG_INFO("pthread_cond_timedwait TIMEOUT, error no: %d\n", ret);
+            COM_LOG_ERROR("pthread_cond_timedwait TIMEOUT, error no: %d\n", ret);
             ret = XQUEUE_RET_TIMEOUT;
             goto end;
         }
@@ -176,6 +184,11 @@ static int timewait_and_mkdata(hqueue_t hqueue, void* data, uint32_t* data_size,
             COM_LOG_ERROR("pthread_cond_wait return fail, error no: %d\n", ret);
             ret = XQUEUE_RET_ERROR;
             goto end;
+        }
+
+        if (queue->count == 0)
+        {
+            COM_LOG_ERROR("[Serious Error]: pthread_cond_wait accidental wakeup with return value: %d\n", ret);
         }
     }
 
@@ -198,14 +211,16 @@ end:
        should call xqueue_destory when user done.
 @param msg_max_len:
        the max length of data you will deal with;
+       pre_alloc_count:
+       will alloc pre_alloc_count*msg_max_len memory for memory loop;
 @return if ok: the new handle;
         if fail: return NULL.
 *************************************************/
-hqueue_t xqueue_create(uint32_t msg_max_len)
+hqueue_t xqueue_create_with_pool(uint32_t msg_max_len, uint32_t pre_alloc_count)
 {
-    size_t alloc_size = sizeof(xqueue_t) + PRE_ALLOCATION_COUNT * max_mem_of_node(msg_max_len);
+    size_t alloc_size = sizeof(xqueue_t) + pre_alloc_count * max_mem_of_node(msg_max_len);
 
-    xqueue_t* hqueue = (xqueue_t*)malloc(alloc_size);
+    xqueue_t *hqueue = (xqueue_t *)malloc(alloc_size);
     if (hqueue == NULL)
     {
         COM_LOG_ERROR("malloc fail: sizeof(xqueue_t): %"PRIu64"\n", (uint64_t)sizeof(xqueue_t));
@@ -219,8 +234,25 @@ hqueue_t xqueue_create(uint32_t msg_max_len)
     pthread_cond_init(&(hqueue->cond), NULL);
     pthread_mutex_init(&(hqueue->mutex), NULL);
 
+    hqueue->pool_alloc_count = pre_alloc_count;
     init_mem_pool(hqueue);
+
     return (hqueue_t)hqueue;
+}
+
+
+/*************************************************
+@brief create a new thread safe FIFO queue, in which random length data can push and pop,
+       so you should indicate the max length of data you will deal with.
+       should call xqueue_destory when user done.
+@param msg_max_len:
+       the max length of data you will deal with;
+@return if ok: the new handle;
+        if fail: return NULL.
+*************************************************/
+hqueue_t xqueue_create(uint32_t msg_max_len)
+{
+    return xqueue_create_with_pool(msg_max_len, PRE_ALLOCATION_COUNT);
 }
 
 /*************************************************
@@ -234,7 +266,7 @@ void xqueue_destory(hqueue_t hqueue)
     {
         return;
     }
-    xqueue_t* queue = (xqueue_t*)hqueue;
+    xqueue_t *queue = (xqueue_t *)hqueue;
     while (queue->count != 0)
     {
         free_oldest_one(queue);
@@ -252,30 +284,33 @@ void xqueue_destory(hqueue_t hqueue)
 @return if ok: 0;
         if fail: <0;
 *************************************************/
-int xqueue_enqueue(hqueue_t hqueue, const void* data, uint32_t data_size)
+int xqueue_enqueue(hqueue_t hqueue, const void *data, uint32_t data_size)
 {
     assert(hqueue != NULL);
-    xqueue_t* queue = (xqueue_t*)hqueue;
+    xqueue_t *queue = (xqueue_t *)hqueue;
     assert(data_size <= queue->msg_max_len);
+
+    pthread_mutex_lock(&(queue->mutex));
 
     if (queue->max_count != 0 && queue->count == queue->max_count)
     {
-        COM_LOG_INFO("reached max_count: %d, dropped the oldest one.\n", queue->max_count);
+        //COM_LOG_INFO("reached max_count: %d, dropped the oldest one.\n", queue->max_count);
         free_oldest_one(queue);
     }
 
-    xnode_t* new_node = NULL;
+    xnode_t *new_node = NULL;
 
     if (is_mem_pool_available(queue))
     {
-        new_node = (xnode_t*)get_mem_from_pool(queue);
+        new_node = (xnode_t *)get_mem_from_pool(queue);
     }
     else
     {
-        new_node = (xnode_t*)malloc(sizeof(xnode_t) + data_size);
+        new_node = (xnode_t *)malloc(sizeof(xnode_t) + data_size);
         if (new_node == NULL)
         {
             COM_LOG_ERROR("malloc xnode fail: sizeof(xnode_t): %"PRIu64", data_size: %u\n", (uint64_t)sizeof(xnode_t), data_size);
+            pthread_mutex_unlock(&(queue->mutex));
             return XQUEUE_RET_ERROR;
         }
     }
@@ -286,8 +321,6 @@ int xqueue_enqueue(hqueue_t hqueue, const void* data, uint32_t data_size)
         memcpy(new_node->data, data, data_size);
     }
     new_node->data_size = data_size;
-
-    pthread_mutex_lock(&(queue->mutex));
 
     if (queue->count == 0)
     {
@@ -301,9 +334,9 @@ int xqueue_enqueue(hqueue_t hqueue, const void* data, uint32_t data_size)
 
     queue->count++;
 
-    pthread_cond_signal(&(queue->cond));
-
     pthread_mutex_unlock(&(queue->mutex));
+
+    pthread_cond_signal(&(queue->cond));
     return XQUEUE_RET_OK;
 }
 
@@ -319,7 +352,7 @@ int xqueue_enqueue(hqueue_t hqueue, const void* data, uint32_t data_size)
 bool xqueue_isempty(hqueue_t hqueue)
 {
     assert(hqueue != NULL);
-    xqueue_t* queue = (xqueue_t*)hqueue;
+    xqueue_t *queue = (xqueue_t *)hqueue;
     bool ret = true;
     pthread_mutex_lock(&(queue->mutex));
     ret = (queue->count == 0);
@@ -337,10 +370,10 @@ bool xqueue_isempty(hqueue_t hqueue)
 @return if ok: true;
         if fail: false;
 *************************************************/
-bool xqueue_try_dequeue(hqueue_t hqueue, void* data, uint32_t* data_size)
+bool xqueue_try_dequeue(hqueue_t hqueue, void *data, uint32_t *data_size)
 {
     assert(hqueue != NULL);
-    xqueue_t* queue = (xqueue_t*)hqueue;
+    xqueue_t *queue = (xqueue_t *)hqueue;
     bool ret = true;
     pthread_mutex_lock(&(queue->mutex));
     if (queue->count == 0)
@@ -368,7 +401,7 @@ end:
         if error: <0;
         timeout: 1;
 *************************************************/
-int xqueue_timewait_and_dequeue(hqueue_t hqueue, void* data, uint32_t* data_size, int timeout_msec)
+int xqueue_timewait_and_dequeue(hqueue_t hqueue, void *data, uint32_t *data_size, int timeout_msec)
 {
     return timewait_and_mkdata(hqueue, data, data_size, timeout_msec, true);
 }
@@ -383,7 +416,7 @@ int xqueue_timewait_and_dequeue(hqueue_t hqueue, void* data, uint32_t* data_size
 @return if ok: 0;
         if fail: <0;
 *************************************************/
-int xqueue_wait_and_dequeue(hqueue_t hqueue, void* data, uint32_t* data_size)
+int xqueue_wait_and_dequeue(hqueue_t hqueue, void *data, uint32_t *data_size)
 {
     return xqueue_timewait_and_dequeue(hqueue, data, data_size, -1);
 }
@@ -398,10 +431,10 @@ int xqueue_wait_and_dequeue(hqueue_t hqueue, void* data, uint32_t* data_size)
 @return if ok: true;
         if fail: false;
 *************************************************/
-bool xqueue_try_front(hqueue_t hqueue, void* data, uint32_t* data_size)
+bool xqueue_try_front(hqueue_t hqueue, void *data, uint32_t *data_size)
 {
     assert(hqueue != NULL);
-    xqueue_t* queue = (xqueue_t*)hqueue;
+    xqueue_t *queue = (xqueue_t *)hqueue;
     bool ret = true;
     pthread_mutex_lock(&(queue->mutex));
     if (queue->count == 0)
@@ -427,7 +460,7 @@ end:
         if error: <0;
         timeout: 1;
 *************************************************/
-int xqueue_timewait_and_front(hqueue_t hqueue, void* data, uint32_t* data_size, int timeout_msec)
+int xqueue_timewait_and_front(hqueue_t hqueue, void *data, uint32_t *data_size, int timeout_msec)
 {
     return timewait_and_mkdata(hqueue, data, data_size, timeout_msec, false);
 }
@@ -442,7 +475,7 @@ int xqueue_timewait_and_front(hqueue_t hqueue, void* data, uint32_t* data_size, 
 @return if ok: 0;
         if fail: <0;
 *************************************************/
-int xqueue_wait_and_front(hqueue_t hqueue, void* data, uint32_t* data_size)
+int xqueue_wait_and_front(hqueue_t hqueue, void *data, uint32_t *data_size)
 {
     return xqueue_timewait_and_front(hqueue, data, data_size, -1);
 }
@@ -456,12 +489,29 @@ int xqueue_wait_and_front(hqueue_t hqueue, void* data, uint32_t* data_size)
 uint32_t xqueue_size(hqueue_t hqueue)
 {
     assert(hqueue != NULL);
-    xqueue_t* queue = (xqueue_t*)hqueue;
+    xqueue_t *queue = (xqueue_t *)hqueue;
     uint32_t size = 0;
     pthread_mutex_lock(&(queue->mutex));
     size = queue->count;
     pthread_mutex_unlock(&(queue->mutex));
     return size;
+}
+
+/*************************************************
+@brief clear all elements
+@param hqueue: the handle of the queue.
+@return void
+*************************************************/
+void xqueue_clear(hqueue_t hqueue)
+{
+    assert(hqueue != NULL);
+    xqueue_t *queue = (xqueue_t *)hqueue;
+    pthread_mutex_lock(&(queue->mutex));
+    while (queue->count != 0)
+    {
+        free_oldest_one(queue);
+    }
+    pthread_mutex_unlock(&(queue->mutex));
 }
 
 
@@ -473,7 +523,7 @@ uint32_t xqueue_size(hqueue_t hqueue)
 uint32_t xqueue_msg_max_len(hqueue_t hqueue)
 {
     assert(hqueue != NULL);
-    xqueue_t* queue = (xqueue_t*)hqueue;
+    xqueue_t *queue = (xqueue_t *)hqueue;
     return queue->msg_max_len;
 }
 
@@ -487,7 +537,7 @@ uint32_t xqueue_msg_max_len(hqueue_t hqueue)
 void xqueue_set_max_count(hqueue_t hqueue, uint32_t max_count)
 {
     assert(hqueue != NULL);
-    xqueue_t* queue = (xqueue_t*)hqueue;
+    xqueue_t *queue = (xqueue_t *)hqueue;
     pthread_mutex_lock(&(queue->mutex));
     queue->max_count = max_count;
     pthread_mutex_unlock(&(queue->mutex));

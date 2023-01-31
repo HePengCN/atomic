@@ -18,7 +18,7 @@
 
 #define gettid() syscall(__NR_gettid)
 
-typedef void*(*pthread_start_routine)(void*);
+typedef void *(*pthread_start_routine)(void *);
 
 typedef struct hthd_pthd
 {
@@ -26,7 +26,7 @@ typedef struct hthd_pthd
     char name[THD_NAME_MAX_LENGTH + 1]; //thread name
     pid_t tid; //thread id;
     int timeout; //timeout of ctrl waiting: in msec
-    void* (*start_routine)(struct hthd_pthd*);
+    void *(*start_routine)(struct hthd_pthd *);
     thd_sched_param_t sched_param;
     pthread_t thd;
     pthread_attr_t attr;
@@ -41,7 +41,7 @@ typedef struct hthd_pthd
 } hthd_pthd_t;
 
 
-char* thd_sched_policy_str(thd_sched_policy_t policy)
+char *thd_sched_policy_str(thd_sched_policy_t policy)
 {
 
     static char strs[4][32] = {"THD_SCHED_OTHER",
@@ -113,10 +113,17 @@ static struct timespec get_outtime(int msec)
     gettimeofday(&now, NULL);
     outtime.tv_sec = now.tv_sec + msec / 1000;
     outtime.tv_nsec = now.tv_usec * 1000 + (msec % 1000) * 1000000l;
+
+    const uint64_t ONE_NSEC = (uint64_t)1000000000;
+    if (outtime.tv_nsec >= ONE_NSEC)
+    {
+        outtime.tv_sec += 1;
+        outtime.tv_nsec -= ONE_NSEC;
+    }
     return outtime;
 }
 
-static int wait_feedback(hthd_pthd_t* hthd)
+static int wait_feedback(hthd_pthd_t *hthd)
 {
     if (hthd->timeout < 0)
     {
@@ -127,11 +134,11 @@ static int wait_feedback(hthd_pthd_t* hthd)
     return pthread_cond_timedwait(&(hthd->cond), &(hthd->mutex), &outtime);
 }
 
-static void pthread_cancel_cleanup(void* thd)
+static void pthread_cancel_cleanup(void *thd)
 {
-    hthd_pthd_t *hthd = (hthd_pthd_t*)thd;
+    hthd_pthd_t *hthd = (hthd_pthd_t *)thd;
     pthread_mutex_unlock(&(hthd->mutex));
-    hthd->task_clear((void*)(hthd->ext));
+    hthd->task_clear((void *)(hthd->ext));
 }
 
 
@@ -140,7 +147,7 @@ static void pthread_cancel_cleanup(void* thd)
 @param hthd: the thread control handle
 @return
 *************************************************/
-static void* start_routine(hthd_pthd_t* hthd)
+static void *start_routine(hthd_pthd_t *hthd)
 {
     pthread_cleanup_push(pthread_cancel_cleanup, hthd);
 
@@ -166,13 +173,12 @@ static void* start_routine(hthd_pthd_t* hthd)
         return hthd;
     }
 
-    ret = hthd->task_init((void*)(hthd->ext));
+    ret = hthd->task_init((void *)(hthd->ext));
 
     pthread_mutex_lock(&(hthd->mutex));
     if (ret == RET_OK)
     {
         hthd->state = THD_STATE_INITED;
-        pthread_cond_signal(&(hthd->cond)); //feedback for thd_create
     }
     else
     {
@@ -180,19 +186,20 @@ static void* start_routine(hthd_pthd_t* hthd)
         hthd->exit = true;
     }
 
+    pthread_cond_signal(&(hthd->cond)); //feedback for thd_create
+
 
     /*init done, enter work loop*/
     do
     {
-        pthread_cond_wait(&(hthd->cond), &(hthd->mutex));
-
         exit = hthd->exit;
-        pause = hthd->pause;
         if (exit)
         {
             pthread_mutex_unlock(&(hthd->mutex));
             break;
         }
+
+        pthread_cond_wait(&(hthd->cond), &(hthd->mutex));
 
         hthd->state = THD_STATE_RUNNING;
         pthread_cond_signal(&(hthd->cond)); //feedback for thd_start
@@ -200,7 +207,7 @@ static void* start_routine(hthd_pthd_t* hthd)
 
         do
         {
-            ret = hthd->task_onceopr((void*)(hthd->ext));
+            ret = hthd->task_onceopr((void *)(hthd->ext));
             if (ret == RET_EXIT)
             {
                 COM_LOG_INFO("task_onceopr of thread<%s> return RET_EXIT, thread about to exit.\n", hthd->name);
@@ -231,7 +238,7 @@ static void* start_routine(hthd_pthd_t* hthd)
 
 
     /*enter exit process*/
-    ret = hthd->task_clear((void*)(hthd->ext));
+    ret = hthd->task_clear((void *)(hthd->ext));
     if (ret != RET_OK)
     {
         COM_LOG_ERROR("task_clear of thread<%s> return fail, error no: %d\n", hthd->name, ret);
@@ -259,7 +266,7 @@ int thd_create(hthd_t thd)
 {
     assert(thd != NULL);
     int ret = 0;
-    hthd_pthd_t *hthd = (hthd_pthd_t*)thd;
+    hthd_pthd_t *hthd = (hthd_pthd_t *)thd;
 
     pthread_mutex_lock(&(hthd->mutex));
     if (hthd->state != THD_STATE_UNCREAT && hthd->state != THD_STATE_EXITED)
@@ -309,7 +316,7 @@ int thd_start(hthd_t thd)
 {
     assert(thd != NULL);
     int ret = 0;
-    hthd_pthd_t *hthd = (hthd_pthd_t*)thd;
+    hthd_pthd_t *hthd = (hthd_pthd_t *)thd;
 
     pthread_mutex_lock(&(hthd->mutex));
 
@@ -353,7 +360,7 @@ int thd_pause(hthd_t thd)
 {
     assert(thd != NULL);
     int ret = 0;
-    hthd_pthd_t *hthd = (hthd_pthd_t*)thd;
+    hthd_pthd_t *hthd = (hthd_pthd_t *)thd;
 
     pthread_mutex_lock(&(hthd->mutex));
     if (hthd->state != THD_STATE_RUNNING)
@@ -392,7 +399,7 @@ end:
 int thd_join(hthd_t thd)
 {
     assert(thd != NULL);
-    hthd_pthd_t *hthd = (hthd_pthd_t*)thd;
+    hthd_pthd_t *hthd = (hthd_pthd_t *)thd;
     pthread_mutex_lock(&(hthd->mutex));
     if (hthd->state == THD_STATE_INITED || hthd->state == THD_STATE_PAUSED)
     {
@@ -414,7 +421,7 @@ int thd_destroy(hthd_t thd)
 {
     assert(thd != NULL);
     int ret = 0;
-    hthd_pthd_t *hthd = (hthd_pthd_t*)thd;
+    hthd_pthd_t *hthd = (hthd_pthd_t *)thd;
 
     pthread_mutex_lock(&(hthd->mutex));
     if (hthd->state == THD_STATE_UNCREAT || hthd->state == THD_STATE_EXITED)
@@ -531,7 +538,7 @@ int thd_create_and_start(hthd_t thd)
     assert(thd != NULL);
     int ret = 0;
     ret = thd_create(thd);
-    if (ret != 0)
+    if (ret != RET_OK)
     {
         return ret;
     }
@@ -547,21 +554,21 @@ int thd_create_and_start(hthd_t thd)
 thd_state_t thd_state(hthd_t thd)
 {
     assert(thd != NULL);
-    hthd_pthd_t *hthd = (hthd_pthd_t*)thd;
+    hthd_pthd_t *hthd = (hthd_pthd_t *)thd;
     pthread_mutex_lock(&(hthd->mutex));
     thd_state_t ret = hthd->state;
     pthread_mutex_unlock(&(hthd->mutex));
     return ret;
 }
 
-const char* thd_name(hthd_t thd)
+const char *thd_name(hthd_t thd)
 {
     assert(thd != NULL);
-    hthd_pthd_t *hthd = (hthd_pthd_t*)thd;
-    return (const char*)hthd->name;
+    hthd_pthd_t *hthd = (hthd_pthd_t *)thd;
+    return (const char *)hthd->name;
 }
 
-char*  thd_state_str(thd_state_t state)
+char  *thd_state_str(thd_state_t state)
 {
     static char strs[THD_STATE_EXITED - THD_STATE_UNCREAT + 1][32] = {"THD_STATE_UNCREAT",
                                                                       "THD_STATE_INITED",
@@ -581,14 +588,13 @@ char*  thd_state_str(thd_state_t state)
 @return if ok, 0;
         if fali, <0;
 *************************************************/
-int thd_set_sched(hthd_t thd, const thd_sched_param_t* thd_sched_param)
+int thd_set_sched(hthd_t thd, const thd_sched_param_t *thd_sched_param)
 {
     assert(thd != NULL);
     assert(thd_sched_param != NULL);
     assert(thd_sched_param->sched_priority >= 1 && thd_sched_param->sched_priority <= 99);
     int ret = 0;
-    hthd_pthd_t *hthd = (hthd_pthd_t*)thd;
-    assert(hthd->state != THD_STATE_UNCREAT && hthd->state != THD_STATE_EXITED);
+    hthd_pthd_t *hthd = (hthd_pthd_t *)thd;
 
     hthd->sched_param = *thd_sched_param;
 
@@ -637,10 +643,10 @@ int thd_set_sched(hthd_t thd, const thd_sched_param_t* thd_sched_param)
 @return if ok, 0;
         if fali, <0;
 *************************************************/
-int thd_get_sched(hthd_t thd, thd_sched_param_t* sched_param)
+int thd_get_sched(hthd_t thd, thd_sched_param_t *sched_param)
 {
     assert(thd != NULL);
-    hthd_pthd_t *hthd = (hthd_pthd_t*)thd;
+    hthd_pthd_t *hthd = (hthd_pthd_t *)thd;
     if (hthd->state == THD_STATE_UNCREAT || hthd->state == THD_STATE_EXITED)
     {
         COM_LOG_ERROR("state of thread<%s> is not expected. error state:%s\n", hthd->name, thd_state_str(hthd->state));
@@ -667,7 +673,7 @@ int thd_get_sched(hthd_t thd, thd_sched_param_t* sched_param)
 pid_t thd_get_tid(hthd_t thd)
 {
     assert(thd != NULL);
-    hthd_pthd_t *hthd = (hthd_pthd_t*)thd;
+    hthd_pthd_t *hthd = (hthd_pthd_t *)thd;
     assert(hthd->state != THD_STATE_UNCREAT && hthd->state != THD_STATE_EXITED);
     return hthd->tid;
 }
@@ -690,11 +696,11 @@ pid_t thd_get_tid(hthd_t thd)
 @return if ok, a new handle;
         if fali, return NULL;
 *************************************************/
-hthd_t thd_handle_new(const char* name,
+hthd_t thd_handle_new(const char *name,
                       task_func task_init,
                       task_func task_onceopr,
                       task_func task_clear,
-                      void* param,
+                      void *param,
                       size_t sizeofparam)
 {
     assert(task_init != NULL);
@@ -703,7 +709,7 @@ hthd_t thd_handle_new(const char* name,
     assert(name != NULL);
     assert(strlen(name) <= THD_NAME_MAX_LENGTH);
 
-    hthd_pthd_t* hthd = (hthd_pthd_t*)malloc(sizeof(hthd_pthd_t) + sizeofparam);
+    hthd_pthd_t *hthd = (hthd_pthd_t *)malloc(sizeof(hthd_pthd_t) + sizeofparam);
     if (hthd == NULL)
     {
         COM_LOG_ERROR("malloc fail, sizeof(hthd_pthd_t): %"PRIu64", sizeofparam: %"PRIu64"\n", (uint64_t)sizeof(hthd_pthd_t), (uint64_t)sizeofparam);
@@ -745,7 +751,7 @@ void thd_handle_release(hthd_t thd)
         COM_LOG_WARN("param with NULL pointer\n");
         return;
     }
-    hthd_pthd_t* hthd = (hthd_pthd_t*)thd;
+    hthd_pthd_t *hthd = (hthd_pthd_t *)thd;
     pthread_cond_destroy(&(hthd->cond));
     pthread_mutex_destroy(&(hthd->mutex));
     free(hthd);
